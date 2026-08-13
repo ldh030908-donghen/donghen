@@ -1,19 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   fetchHoursSummary,
+  fetchHoursTrend,
+  fetchMonths,
+  type EmployeeMatch,
   type GroupLevel,
   type HoursSummaryItem,
+  type HoursTrendItem,
   type Metric,
   type PeriodKind,
 } from "@/lib/api";
-
-const GROUP_OPTIONS: { value: GroupLevel; label: string }[] = [
-  { value: "division", label: "사업부" },
-  { value: "department", label: "부서" },
-  { value: "employee", label: "개인" },
-];
+import OrgFilter from "./OrgFilter";
+import EmployeePicker from "./EmployeePicker";
+import MonthlyTrendChart from "./MonthlyTrendChart";
 
 const PERIOD_OPTIONS: { value: PeriodKind; label: string }[] = [
   { value: "week", label: "주" },
@@ -82,20 +83,44 @@ const GROUP_COL_LABELS: Record<GroupLevel, string[]> = {
   employee: ["사업부", "부서명", "사번", "성명", "직급"],
 };
 
-export default function HoursSummaryView({ sessionId }: { sessionId: string }) {
-  const [groupLevel, setGroupLevel] = useState<GroupLevel>("division");
+export default function HoursSummaryView() {
+  const [division, setDivision] = useState<string | null>(null);
+  const [department, setDepartment] = useState<string | null>(null);
+  const [employee, setEmployee] = useState<EmployeeMatch | null>(null);
   const [periodKind, setPeriodKind] = useState<PeriodKind>("month");
   const [metric, setMetric] = useState<Metric>("worktime");
   const [items, setItems] = useState<HoursSummaryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [trend, setTrend] = useState<HoursTrendItem[] | null>(null);
+
+  useEffect(() => {
+    fetchMonths().then((months) => {
+      const year = months[months.length - 1]?.slice(0, 4);
+      if (!year) return;
+      fetchHoursTrend(year, metric).then(setTrend);
+    });
+  }, [metric]);
+
+  // 드릴다운 깊이에 따라 자동으로 집계 단위를 정한다: 개인 선택 > 부서 선택 > 사업부 선택 > 전체
+  const groupLevel: GroupLevel = employee ? "employee" : department ? "employee" : division ? "department" : "division";
+  const effectiveDivision = employee ? employee.사업부 : division ?? undefined;
+  const effectiveDepartment = employee ? employee.부서명 : department ?? undefined;
 
   useEffect(() => {
     let cancelled = false;
     setItems(null);
     setError(null);
-    fetchHoursSummary(sessionId, groupLevel, periodKind, metric)
+    fetchHoursSummary({
+      groupLevel,
+      periodKind,
+      metric,
+      division: effectiveDivision ?? undefined,
+      department: effectiveDepartment ?? undefined,
+    })
       .then((res) => {
-        if (!cancelled) setItems(res.items);
+        if (cancelled) return;
+        const rows = employee ? res.items.filter((r) => r.사번 === employee.사번) : res.items;
+        setItems(rows);
       })
       .catch((e) => {
         if (!cancelled) setError(e.message);
@@ -103,40 +128,87 @@ export default function HoursSummaryView({ sessionId }: { sessionId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, groupLevel, periodKind, metric]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupLevel, periodKind, metric, effectiveDivision, effectiveDepartment, employee?.사번]);
 
-  const sorted = items
-    ? [...items].sort(
-        (a, b) =>
-          b.period.localeCompare(a.period) ||
-          b.avg_hours_per_employee_per_month - a.avg_hours_per_employee_per_month
-      )
-    : null;
+  const sorted = useMemo(
+    () =>
+      items
+        ? [...items].sort(
+            (a, b) =>
+              b.period.localeCompare(a.period) ||
+              b.avg_hours_per_employee_per_month - a.avg_hours_per_employee_per_month
+          )
+        : null,
+    [items]
+  );
   const capped = sorted?.slice(0, 500) ?? null;
+
+  const breadcrumb = [division, department, employee?.성명].filter(Boolean);
 
   return (
     <div className="flex flex-col gap-6">
+      {trend && (
+        <MonthlyTrendChart
+          title={`${trend[0]?.month.slice(0, 4) ?? ""}년 전사 월별 1인당 평균 ${metric === "worktime" ? "실근로시간" : "체류시간"} 추이`}
+          points={trend.map((t) => ({
+            label: `${Number(t.month.slice(5, 7))}월`,
+            value: Math.round(t.avg_hours_per_employee_per_month * 10) / 10,
+          }))}
+          valueFormatter={(v) => `${v}h`}
+          emptyHint="이번 해에 업로드된 데이터가 아직 없습니다."
+        />
+      )}
+
       <div
-        className="rounded-2xl p-5 flex flex-wrap items-center gap-x-8 gap-y-4"
+        className="rounded-2xl p-5 flex flex-col gap-4"
         style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <OrgFilter
+            division={division}
+            department={department}
+            onDivisionChange={(v) => {
+              setDivision(v);
+              setEmployee(null);
+            }}
+            onDepartmentChange={(v) => {
+              setDepartment(v);
+              setEmployee(null);
+            }}
+          />
           <span className="text-xs" style={{ color: "var(--text-faint)" }}>
-            조직 단위
+            또는
           </span>
-          <SegmentedControl options={GROUP_OPTIONS} value={groupLevel} onChange={setGroupLevel} />
+          <EmployeePicker selected={employee} onSelect={setEmployee} />
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs" style={{ color: "var(--text-faint)" }}>
-            기간 단위
-          </span>
-          <SegmentedControl options={PERIOD_OPTIONS} value={periodKind} onChange={setPeriodKind} />
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs" style={{ color: "var(--text-faint)" }}>
-            지표
-          </span>
-          <SegmentedControl options={METRIC_OPTIONS} value={metric} onChange={setMetric} />
+
+        {breadcrumb.length > 0 && (
+          <div className="text-xs flex items-center gap-1.5" style={{ color: "var(--accent-strong)" }}>
+            <span style={{ color: "var(--text-faint)" }}>조회 범위:</span>
+            전체
+            {breadcrumb.map((b, i) => (
+              <span key={i} className="flex items-center gap-1.5">
+                <span style={{ color: "var(--text-faint)" }}>→</span>
+                {b}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 pt-1" style={{ borderTop: "1px solid var(--border)" }}>
+          <div className="flex items-center gap-3 pt-3">
+            <span className="text-xs" style={{ color: "var(--text-faint)" }}>
+              기간 단위
+            </span>
+            <SegmentedControl options={PERIOD_OPTIONS} value={periodKind} onChange={setPeriodKind} />
+          </div>
+          <div className="flex items-center gap-3 pt-3">
+            <span className="text-xs" style={{ color: "var(--text-faint)" }}>
+              지표
+            </span>
+            <SegmentedControl options={METRIC_OPTIONS} value={metric} onChange={setMetric} />
+          </div>
         </div>
       </div>
 
@@ -145,8 +217,7 @@ export default function HoursSummaryView({ sessionId }: { sessionId: string }) {
         style={{ background: "var(--accent-soft)", color: "var(--accent-strong)" }}
       >
         “평균”은 해당 기간 동안 인원 1인당 누적 근로시간을, 실제 데이터가 존재하는 개월 수로
-        나눈 <strong>1인당 월평균 근로시간</strong> 기준입니다. 예: 2분기 중 6월 데이터만 있으면
-        6월 실적을 그대로 보여주고, 3개월치가 모두 있으면 분기 총합을 3으로 나눕니다.
+        나눈 <strong>1인당 월평균 근로시간</strong> 기준입니다.
       </div>
 
       <div className="rounded-2xl overflow-hidden" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
@@ -174,7 +245,7 @@ export default function HoursSummaryView({ sessionId }: { sessionId: string }) {
               </thead>
               <tbody>
                 {capped.map((row, i) => (
-                  <tr key={i} style={{ borderTop: "1px solid var(--border)" }} className="hover:bg-white/[0.02]">
+                  <tr key={i} style={{ borderTop: "1px solid var(--border)" }} className="hover:bg-[var(--bg-elevated)]">
                     {GROUP_COL_LABELS[groupLevel].map((col) => (
                       <td key={col} className="px-4 py-3">
                         {(row as unknown as Record<string, string>)[col]}

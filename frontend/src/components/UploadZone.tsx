@@ -116,7 +116,7 @@ export default function UploadZone({
       {error && (
         <div
           className="mt-4 px-4 py-3 rounded-lg text-sm"
-          style={{ background: "#f2555a15", color: "var(--danger)", border: "1px solid #f2555a33" }}
+          style={{ background: "#dc262612", color: "var(--danger)", border: "1px solid #dc262633" }}
         >
           {error}
         </div>

@@ -1,21 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #08090b;
-  --bg-elevated: #0f1113;
-  --surface: #131519;
-  --surface-hover: #1a1d22;
-  --border: #22252b;
-  --border-strong: #2e323a;
-  --text: #ededf0;
-  --text-muted: #8b8f98;
-  --text-faint: #55585f;
-  --accent: #6d5efc;
-  --accent-soft: #6d5efc22;
-  --accent-strong: #8578ff;
-  --success: #34d399;
-  --warning: #f5b942;
-  --danger: #f2555a;
+  --bg: #f4f6fb;
+  --bg-elevated: #eaeef6;
+  --surface: #ffffff;
+  --surface-hover: #f3f5fa;
+  --border: #e2e6f0;
+  --border-strong: #cbd2e1;
+  --text: #10131c;
+  --text-muted: #5c6272;
+  --text-faint: #8991a3;
+  --accent: #2563eb;
+  --accent-soft: #2563eb17;
+  --accent-strong: #1d4ed8;
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
   --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
 }
 

@@ -10,8 +10,10 @@ from __future__ import annotations
 import pandas as pd
 
 from . import columns as C
+from .org import DIVISION_COL
 
-IDENTITY_COLS = [C.COL_EMP_ID, C.COL_DEPT, C.COL_NAME, C.COL_RANK]
+IDENTITY_COLS = [C.COL_EMP_ID, DIVISION_COL, C.COL_DEPT, C.COL_NAME, C.COL_RANK]
+_AGG_IDENTITY_COLS = [DIVISION_COL, C.COL_DEPT, C.COL_NAME, C.COL_RANK]
 
 # 시간연차류 근태 값 패턴 (규칙 4에서 사용)
 HOUR_LEAVE_PATTERN = r"^\d+시간\s*연차$"
@@ -45,7 +47,7 @@ def rule1_monthly_max_hours(
         .agg(
             worktime_hours=("worktime_minutes", "sum"),
             stay_hours=("stay_minutes", "sum"),
-            **{c: (c, "first") for c in [C.COL_DEPT, C.COL_NAME, C.COL_RANK]},
+            **{c: (c, "first") for c in _AGG_IDENTITY_COLS},
         )
         .reset_index()
     )
@@ -74,6 +76,7 @@ def rule1_monthly_max_hours(
         rows.append(
             {
                 C.COL_EMP_ID: r[C.COL_EMP_ID],
+                DIVISION_COL: r[DIVISION_COL],
                 C.COL_DEPT: r[C.COL_DEPT],
                 C.COL_NAME: r[C.COL_NAME],
                 C.COL_RANK: r[C.COL_RANK],
@@ -101,7 +104,7 @@ def rule2_checkin_changed_start_gap(df: pd.DataFrame, gap_threshold_minutes: int
             occurrence_count=(C.COL_DATE, "count"),
             max_gap=("gap", "max"),
             dates=(C.COL_DATE, lambda s: ", ".join(sorted(s)[:5])),
-            **{c: (c, "first") for c in [C.COL_DEPT, C.COL_NAME, C.COL_RANK]},
+            **{c: (c, "first") for c in _AGG_IDENTITY_COLS},
         )
         .reset_index()
     )
@@ -143,7 +146,7 @@ def rule3_excessive_exclude_time(
             exclude_hours=("exclude_minutes", lambda s: s.sum() / 60),
             excess_days=("is_excess_day", "sum"),
             is_hq_flex=("is_hq_flex", "first"),
-            **{c: (c, "first") for c in [C.COL_DEPT, C.COL_NAME, C.COL_RANK]},
+            **{c: (c, "first") for c in _AGG_IDENTITY_COLS},
         )
         .reset_index()
     )
@@ -206,7 +209,7 @@ def rule4_core_time_violation_without_hour_leave(df: pd.DataFrame) -> pd.DataFra
         .agg(
             occurrence_count=(C.COL_DATE, "count"),
             examples=("violation", lambda s: "; ".join(s.head(3))),
-            **{c: (c, "first") for c in [C.COL_DEPT, C.COL_NAME, C.COL_RANK]},
+            **{c: (c, "first") for c in _AGG_IDENTITY_COLS},
         )
         .reset_index()
     )
@@ -253,6 +256,7 @@ def rule5_month_end_exclude_bulk_pattern(
                 rows.append(
                     {
                         C.COL_EMP_ID: emp_id,
+                        DIVISION_COL: r[DIVISION_COL],
                         C.COL_DEPT: r[C.COL_DEPT],
                         C.COL_NAME: r[C.COL_NAME],
                         C.COL_RANK: r[C.COL_RANK],
@@ -274,7 +278,7 @@ def rule5_month_end_exclude_bulk_pattern(
         .agg(
             occurrence_count=("occurrence_count", "sum"),
             detail=("detail", lambda s: "; ".join(s)),
-            **{c: (c, "first") for c in [C.COL_DEPT, C.COL_NAME, C.COL_RANK]},
+            **{c: (c, "first") for c in _AGG_IDENTITY_COLS},
         )
         .reset_index()
     )
@@ -307,7 +311,7 @@ def rule6_badge_data_integrity(df: pd.DataFrame, min_occurrences: int = 3) -> pd
             occurrence_count=(C.COL_DATE, "count"),
             dates=(C.COL_DATE, lambda s: ", ".join(sorted(s)[:5])),
             issues=("issue", lambda s: ", ".join(sorted(set(s)))),
-            **{c: (c, "first") for c in [C.COL_DEPT, C.COL_NAME, C.COL_RANK]},
+            **{c: (c, "first") for c in _AGG_IDENTITY_COLS},
         )
         .reset_index()
     )
@@ -371,6 +375,7 @@ def rule7_consecutive_long_stay(
         out_rows.append(
             {
                 C.COL_EMP_ID: emp_id,
+                DIVISION_COL: r0[DIVISION_COL],
                 C.COL_DEPT: r0[C.COL_DEPT],
                 C.COL_NAME: r0[C.COL_NAME],
                 C.COL_RANK: r0[C.COL_RANK],
@@ -391,7 +396,7 @@ def rule7_consecutive_long_stay(
         .agg(
             occurrence_count=("occurrence_count", "max"),
             detail=("detail", lambda s: "; ".join(s)),
-            **{c: (c, "first") for c in [C.COL_DEPT, C.COL_NAME, C.COL_RANK]},
+            **{c: (c, "first") for c in _AGG_IDENTITY_COLS},
             rule_code=("rule_code", "first"),
             case_name=("case_name", "first"),
         )

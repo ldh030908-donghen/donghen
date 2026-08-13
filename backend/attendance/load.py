@@ -30,7 +30,37 @@ def parse_timedelta_str_to_minutes(value: object) -> float:
     return int(days) * 1440 + int(h) * 60 + int(mi) + int(sec) / 60
 
 
+_XLSX_MAGIC = b"PK\x03\x04"  # .xlsx/.xlsm은 zip 컨테이너라 항상 이 시그니처로 시작
+_OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"  # 구버전 .xls(바이너리) 시그니처
+
+
+def _check_xlsx_format(source) -> None:
+    """openpyxl에 넘기기 전에 파일 포맷을 미리 확인해 이해하기 쉬운 오류를 낸다."""
+    if isinstance(source, (str, )) or hasattr(source, "read") is False:
+        with open(source, "rb") as f:
+            head = f.read(32)
+    else:
+        pos = source.tell()
+        head = source.read(32)
+        source.seek(pos)
+
+    if head.startswith(_OLE_MAGIC):
+        raise ValueError(
+            "이 파일은 구버전 엑셀(.xls) 형식입니다. 엑셀에서 열어 '.xlsx' 형식으로 다시 저장한 뒤 업로드해주세요."
+        )
+    if b"DRM" in head.upper() or head.startswith(b"<##"):
+        raise ValueError(
+            "이 파일은 사내 DRM(문서보안) 솔루션으로 암호화되어 있어 열 수 없습니다. "
+            "DRM 클라이언트의 '보안 해제' 또는 '외부 반출' 기능으로 암호를 해제한 뒤 다시 업로드해주세요."
+        )
+    if not head.startswith(_XLSX_MAGIC):
+        raise ValueError(
+            "엑셀(.xlsx) 파일로 인식되지 않습니다. 파일이 손상되었거나 엑셀 파일이 아닐 수 있습니다."
+        )
+
+
 def load_raw(xlsx_path: str) -> pd.DataFrame:
+    _check_xlsx_format(xlsx_path)
     df = pd.read_excel(xlsx_path, sheet_name="RAW", dtype=str, engine="openpyxl")
 
     df["stay_minutes"] = [

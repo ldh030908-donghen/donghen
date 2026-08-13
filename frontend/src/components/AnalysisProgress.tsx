@@ -1,8 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Step = { id: string; label: string };
+type Particle = { left: number; delay: number; duration: number; dx: number; size: number };
+
+function makeParticles(): Particle[] {
+  return Array.from({ length: 22 }).map(() => ({
+    left: Math.random() * 100,
+    delay: Math.random() * 4,
+    duration: 4 + Math.random() * 4,
+    dx: (Math.random() - 0.5) * 60,
+    size: 2 + Math.random() * 2,
+  }));
+}
 
 const LOG_TEMPLATES: Record<string, string[]> = {
   parse: [
@@ -35,17 +46,11 @@ export default function AnalysisProgress({
   const [logLines, setLogLines] = useState<{ id: string; text: string }[]>([]);
   const logEndRef = useRef<HTMLDivElement>(null);
   const logCounter = useRef(0);
-  const particles = useMemo(
-    () =>
-      Array.from({ length: 22 }).map(() => ({
-        left: Math.random() * 100,
-        delay: Math.random() * 4,
-        duration: 4 + Math.random() * 4,
-        dx: (Math.random() - 0.5) * 60,
-        size: 2 + Math.random() * 2,
-      })),
-    []
-  );
+  const [particles, setParticles] = useState<Particle[]>([]);
+
+  useEffect(() => {
+    setParticles(makeParticles());
+  }, []);
 
   useEffect(() => {
     if (activeIndex >= steps.length) {

@@ -1,42 +1,32 @@
 "use client";
 
-import { useState } from "react";
-import UploadZone from "@/components/UploadZone";
-import AnalysisProgress from "@/components/AnalysisProgress";
+import { useEffect, useState } from "react";
 import Dashboard from "@/components/Dashboard";
-import { uploadRawFile, type UploadResponse } from "@/lib/api";
-
-type Stage = "upload" | "analyzing" | "dashboard";
+import { fetchOverview, type Overview } from "@/lib/api";
 
 export default function Home() {
-  const [stage, setStage] = useState<Stage>("upload");
-  const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [overview, setOverview] = useState<Overview | null>(null);
 
-  async function handleFile(file: File) {
-    setError(null);
-    setUploading(true);
-    try {
-      const result = await uploadRawFile(file);
-      setUploadResult(result);
-      setStage("analyzing");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "업로드에 실패했습니다.");
-    } finally {
-      setUploading(false);
-    }
+  function reload() {
+    fetchOverview().then(setOverview);
   }
+
+  useEffect(() => {
+    reload();
+  }, []);
 
   return (
     <main className="flex-1 flex items-center justify-center px-6 py-16">
-      {stage === "upload" && (
-        <UploadZone onFileSelected={handleFile} error={error} uploading={uploading} />
+      {overview === null ? (
+        <div className="flex flex-col items-center gap-3">
+          <span
+            className="w-6 h-6 rounded-full block"
+            style={{ border: "2.5px solid var(--accent)", borderTopColor: "transparent", animation: "spin 0.8s linear infinite" }}
+          />
+        </div>
+      ) : (
+        <Dashboard overview={overview} onDataChanged={reload} />
       )}
-      {stage === "analyzing" && uploadResult && (
-        <AnalysisProgress steps={uploadResult.steps} onComplete={() => setStage("dashboard")} />
-      )}
-      {stage === "dashboard" && uploadResult && <Dashboard upload={uploadResult} />}
     </main>
   );
 }

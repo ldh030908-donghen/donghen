@@ -29,7 +29,10 @@ GROUP_LEVEL_COLS = {
 
 def _prepare(df: pd.DataFrame, division_map: "dict[str, str] | None") -> pd.DataFrame:
     d = add_period_columns(df)
-    d = attach_division(d, division_map)
+    # DB에서 읽은 데이터는 업로드 시점에 이미 사업부가 붙어있으므로 재계산하지 않는다.
+    # division_map을 명시적으로 넘긴 경우(재매핑 요청)에만 다시 붙인다.
+    if DIVISION_COL not in d.columns or division_map is not None:
+        d = attach_division(d, division_map)
     return d
 
 
