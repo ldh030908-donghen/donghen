@@ -1,21 +1,43 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f4f6fb;
-  --bg-elevated: #eaeef6;
+  /* 배경 — 순백이 아니라 아주 옅은 블루 틴트를 줘서 "프레시"하면서도 카드가 뜨는 느낌 */
+  --bg: #f6f8fd;
+  --bg-elevated: #eef2fb;
   --surface: #ffffff;
-  --surface-hover: #f3f5fa;
-  --border: #e2e6f0;
-  --border-strong: #cbd2e1;
-  --text: #10131c;
-  --text-muted: #5c6272;
-  --text-faint: #8991a3;
-  --accent: #2563eb;
-  --accent-soft: #2563eb17;
-  --accent-strong: #1d4ed8;
+  --surface-hover: #f3f6fd;
+  --border: #e4e9f5;
+  --border-strong: #cdd6ec;
+  --text: #0f1626;
+  --text-muted: #5b6478;
+  --text-faint: #8b93a7;
+
+  /* 브랜드 블루 스케일 */
+  --accent-50: #eef4ff;
+  --accent-100: #dbe7fe;
+  --accent: #2f6fed;
+  --accent-soft: #2f6fed14;
+  --accent-strong: #1a4fd1;
+  --accent-ink: #163a9e;
+
+  /* 상태(심각도) 팔레트 — 특이건 시인성용, 브랜드 블루와 분리된 별도 채널 */
+  --status-info: #2f6fed;
+  --status-info-soft: #2f6fed12;
+  --status-warning: #d97706;
+  --status-warning-soft: #f59e0b17;
+  --status-serious: #ea580c;
+  --status-serious-soft: #ea580c17;
+  --status-critical: #dc2626;
+  --status-critical-soft: #dc262617;
+
   --success: #059669;
   --warning: #d97706;
   --danger: #dc2626;
+
+  --shadow-sm: 0 1px 2px rgba(15, 22, 38, 0.04), 0 1px 1px rgba(15, 22, 38, 0.03);
+  --shadow-md: 0 8px 24px -8px rgba(31, 62, 130, 0.14), 0 2px 8px -2px rgba(31, 62, 130, 0.08);
+  --shadow-glow: 0 0 0 1px var(--accent-100), 0 8px 24px -6px rgba(47, 111, 237, 0.25);
+
   --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
 }
 
@@ -28,6 +50,19 @@
 
 * {
   box-sizing: border-box;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input,
+select {
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
 html,

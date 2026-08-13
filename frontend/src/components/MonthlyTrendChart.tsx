@@ -30,7 +30,7 @@ export default function MonthlyTrendChart({
 
   if (points.length === 0) {
     return (
-      <div className="rounded-2xl p-5" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+      <div className="rounded-2xl p-5" style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}>
         <div className="text-xs font-medium mb-1" style={{ color: "var(--text-faint)" }}>
           {title}
         </div>
@@ -58,7 +58,9 @@ export default function MonthlyTrendChart({
   const y = (v: number) => padT + plotH - (v / yMax) * plotH;
 
   const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(p.value)}`).join(" ");
+  const areaPath = `${linePath} L ${x(points.length - 1)} ${padT + plotH} L ${x(0)} ${padT + plotH} Z`;
   const last = points[points.length - 1];
+  const gradientId = `trend-fill-${title.replace(/[^a-zA-Z0-9]/g, "")}`;
 
   return (
     <div className="rounded-2xl p-5" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
@@ -67,6 +69,13 @@ export default function MonthlyTrendChart({
       </div>
       <div className="relative w-full" style={{ aspectRatio: `${W} / ${H}` }}>
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.14} />
+              <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          {points.length > 1 && <path d={areaPath} fill={`url(#${gradientId})`} stroke="none" />}
           {ticks.map((t, i) => (
             <g key={i}>
               <line

@@ -56,9 +56,9 @@ export default function UploadZone({
         aria-busy={uploading}
         className="relative rounded-2xl p-16 text-center transition-all duration-200"
         style={{
-          background: "var(--surface)",
+          background: dragActive ? "var(--accent-50)" : "var(--surface)",
           border: `1.5px dashed ${dragActive ? "var(--accent)" : "var(--border-strong)"}`,
-          boxShadow: dragActive ? "0 0 0 4px var(--accent-soft)" : "none",
+          boxShadow: dragActive ? "var(--shadow-glow)" : "var(--shadow-sm)",
           cursor: uploading ? "default" : "pointer",
           opacity: uploading ? 0.85 : 1,
         }}

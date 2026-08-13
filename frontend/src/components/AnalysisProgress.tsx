@@ -135,7 +135,7 @@ export default function AnalysisProgress({
         {/* 워크플로우 그래프 */}
         <div
           className="rounded-2xl p-5"
-          style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+          style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}
         >
           <div className="text-xs font-medium mb-4" style={{ color: "var(--text-faint)" }}>
             분석 워크플로우
@@ -188,7 +188,7 @@ export default function AnalysisProgress({
         {/* 라이브 로그 스트림 */}
         <div
           className="rounded-2xl p-5 flex flex-col"
-          style={{ background: "#000000", border: "1px solid var(--border)" }}
+          style={{ background: "#0a0d16", border: "1px solid var(--border)", boxShadow: "var(--shadow-md)" }}
         >
           <div className="flex items-center gap-1.5 mb-4">
             <span className="w-2.5 h-2.5 rounded-full" style={{ background: "#f2555a" }} />

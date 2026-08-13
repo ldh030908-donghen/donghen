@@ -38,19 +38,29 @@ export default function Dashboard({
   return (
     <div className="w-full max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">근태 분석 대시보드</h1>
-          <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>
-            {hasData
-              ? `누적 ${overview.total_employee_count.toLocaleString()}명 · 최신 ${overview.latest_month} 기준 ${overview.employee_count.toLocaleString()}명 · 보유 데이터 ${overview.available_months.length}개월`
-              : "업로드된 데이터 없음"}
-          </p>
+        <div className="flex items-center gap-3">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: "linear-gradient(135deg, var(--accent) 0%, #4a89f5 100%)", boxShadow: "var(--shadow-glow)" }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+              <path d="M3 3v18h18M8 17V9m5 8V5m5 12v-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight">근태 분석 대시보드</h1>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-faint)" }}>
+              {hasData
+                ? `누적 ${overview.total_employee_count.toLocaleString()}명 · 최신 ${overview.latest_month} 기준 ${overview.employee_count.toLocaleString()}명 · 보유 데이터 ${overview.available_months.length}개월`
+                : "업로드된 데이터 없음"}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {hasData && (
             <div
               className="inline-flex p-1 rounded-lg gap-1"
-              style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}
             >
               <button
                 onClick={() => setTab("anomalies")}
@@ -76,8 +86,8 @@ export default function Dashboard({
           )}
           <button
             onClick={() => setShowUpload(true)}
-            className="px-4 py-2 rounded-lg text-sm font-medium"
-            style={{ background: "var(--accent)", color: "#fff" }}
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-transform hover:-translate-y-px"
+            style={{ background: "var(--accent)", color: "#fff", boxShadow: "var(--shadow-glow)" }}
           >
             + 월별 데이터 업로드
           </button>

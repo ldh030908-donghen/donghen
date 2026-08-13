@@ -162,7 +162,7 @@ export default function HoursSummaryView() {
 
       <div
         className="rounded-2xl p-5 flex flex-col gap-4"
-        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+        style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}
       >
         <div className="flex flex-wrap items-center gap-3">
           <OrgFilter
@@ -220,7 +220,10 @@ export default function HoursSummaryView() {
         나눈 <strong>1인당 월평균 근로시간</strong> 기준입니다.
       </div>
 
-      <div className="rounded-2xl overflow-hidden" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+      <div
+        className="rounded-2xl overflow-hidden"
+        style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}
+      >
         {error && (
           <div className="p-6 text-sm" style={{ color: "var(--danger)" }}>
             {error}

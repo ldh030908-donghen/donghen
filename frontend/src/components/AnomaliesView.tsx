@@ -14,35 +14,80 @@ import OrgFilter from "./OrgFilter";
 import EmployeePicker from "./EmployeePicker";
 import RulesMetaModal from "./RulesMetaModal";
 import MonthlyTrendChart from "./MonthlyTrendChart";
+import { SEVERITY_STYLE, severityTier } from "@/lib/severity";
 
 function StatTile({
   label,
   value,
+  icon,
+  tone = "neutral",
   onClick,
 }: {
   label: string;
   value: string;
+  icon: React.ReactNode;
+  tone?: "neutral" | "accent" | "critical";
   onClick?: () => void;
 }) {
   const Comp = onClick ? "button" : "div";
+  const iconBg = tone === "critical" ? "var(--status-critical-soft)" : tone === "accent" ? "var(--accent-soft)" : "var(--bg-elevated)";
+  const iconFg = tone === "critical" ? "var(--status-critical)" : tone === "accent" ? "var(--accent)" : "var(--text-muted)";
   return (
     <Comp
       onClick={onClick}
-      className="rounded-2xl p-5 text-left w-full"
+      className="rounded-2xl p-5 text-left w-full transition-transform"
       style={{
         background: "var(--surface)",
         border: "1px solid var(--border)",
+        boxShadow: "var(--shadow-sm)",
         cursor: onClick ? "pointer" : "default",
       }}
     >
-      <div className="text-xs mb-2 flex items-center gap-1" style={{ color: "var(--text-faint)" }}>
-        {label}
-        {onClick && <span style={{ color: "var(--accent)" }}>↗</span>}
+      <div className="flex items-center justify-between mb-3">
+        <div
+          className="w-9 h-9 rounded-lg flex items-center justify-center"
+          style={{ background: iconBg, color: iconFg }}
+        >
+          {icon}
+        </div>
+        {onClick && (
+          <span className="text-xs font-medium" style={{ color: "var(--accent)" }}>
+            자세히 →
+          </span>
+        )}
       </div>
-      <div className="text-3xl font-semibold tracking-tight">{value}</div>
+      <div className="text-xs mb-1" style={{ color: "var(--text-faint)" }}>
+        {label}
+      </div>
+      <div className="text-[28px] font-bold tracking-tight" style={{ color: "var(--text)" }}>
+        {value}
+      </div>
     </Comp>
   );
 }
+
+const ICONS = {
+  total: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14.18A2 2 0 0 0 3.82 21h16.36a2 2 0 0 0 1.71-3l-8.18-14.14a2 2 0 0 0-3.42 0z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  people: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  rules: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  top: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+};
 
 const PAGE_SIZE = 30;
 
@@ -112,6 +157,9 @@ export default function AnomaliesView() {
 
   const visible = showAll ? filtered : filtered.slice(0, PAGE_SIZE);
   const hasMore = filtered.length > PAGE_SIZE;
+  // 심각도 배지 색은 "지금 조회 중인 전체 데이터"(필터 전) 기준으로 고정해서
+  // 규칙 필터를 바꿔도 같은 건이 계속 같은 색으로 보이게 한다.
+  const maxOccurrence = data ? Math.max(...data.items.map((i) => i.occurrence_count), 1) : 1;
 
   const breadcrumb = [division, department, employee?.성명].filter(Boolean);
 
@@ -119,7 +167,7 @@ export default function AnomaliesView() {
     <div className="flex flex-col gap-6">
       <div
         className="rounded-2xl p-5 flex flex-col gap-4"
-        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+        style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}
       >
         <div className="flex flex-wrap items-center gap-3">
           {months.length > 1 && (
@@ -196,11 +244,22 @@ export default function AnomaliesView() {
       {data && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatTile label={`총 특이건 (${data.month ?? "-"})`} value={data.total.toLocaleString()} />
-            <StatTile label="특이 인원(중복 제외)" value={data.affected_employees.toLocaleString()} />
+            <StatTile
+              label={`총 특이건 (${data.month ?? "-"})`}
+              value={data.total.toLocaleString()}
+              icon={ICONS.total}
+              tone="critical"
+            />
+            <StatTile
+              label="특이 인원(중복 제외)"
+              value={data.affected_employees.toLocaleString()}
+              icon={ICONS.people}
+              tone="accent"
+            />
             <StatTile
               label="탐지 규칙 수"
               value={String(Object.keys(data.by_rule).length || 7)}
+              icon={ICONS.rules}
               onClick={() => setShowRulesModal(true)}
             />
             <StatTile
@@ -210,12 +269,16 @@ export default function AnomaliesView() {
                   ? ruleLabel(Object.entries(data.by_rule).sort((a, b) => b[1] - a[1])[0][0])
                   : "-"
               }
+              icon={ICONS.top}
             />
           </div>
 
           <RuleCountChart byRule={data.by_rule} activeRule={activeRule} onSelect={setActiveRule} />
 
-          <div className="rounded-2xl overflow-hidden" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+          <div
+            className="rounded-2xl overflow-hidden"
+            style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}
+          >
             <div className="flex items-center gap-3 p-4" style={{ borderBottom: "1px solid var(--border)" }}>
               <input
                 value={search}
@@ -240,6 +303,20 @@ export default function AnomaliesView() {
               </div>
             </div>
 
+            {/* 심각도 범례 — 왼쪽 색상 띠와 발생 배지가 무엇을 뜻하는지 */}
+            <div
+              className="flex items-center gap-4 px-4 py-2 text-[11px]"
+              style={{ background: "var(--bg)", color: "var(--text-faint)", borderBottom: "1px solid var(--border)" }}
+            >
+              <span>발생 횟수 기준 심각도:</span>
+              {(["critical", "serious", "info"] as const).map((tier) => (
+                <span key={tier} className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full" style={{ background: SEVERITY_STYLE[tier].fg }} />
+                  {SEVERITY_STYLE[tier].label}
+                </span>
+              ))}
+            </div>
+
             <div className={showAll ? "overflow-x-auto max-h-[560px] overflow-y-auto" : "overflow-x-auto"}>
               <table className="w-full text-sm">
                 <thead className={showAll ? "sticky top-0" : ""} style={{ background: "var(--surface)" }}>
@@ -249,14 +326,18 @@ export default function AnomaliesView() {
                     <th className="text-left font-medium px-4 py-3 whitespace-nowrap">성명</th>
                     <th className="text-left font-medium px-4 py-3 whitespace-nowrap">직급</th>
                     <th className="text-left font-medium px-4 py-3 whitespace-nowrap">특이사례 케이스</th>
+                    <th className="text-right font-medium px-4 py-3 whitespace-nowrap">발생</th>
                     <th className="text-left font-medium px-4 py-3 whitespace-nowrap">상세</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map((item, i) => (
+                  {visible.map((item, i) => {
+                    const tier = severityTier(item.occurrence_count, maxOccurrence);
+                    const sv = SEVERITY_STYLE[tier];
+                    return (
                     <tr
                       key={`${item.사번}-${item.rule_code}-${i}`}
-                      style={{ borderTop: "1px solid var(--border)" }}
+                      style={{ borderTop: "1px solid var(--border)", borderLeft: `3px solid ${sv.fg}` }}
                       className="hover:bg-[var(--bg-elevated)]"
                     >
                       <td className="px-4 py-3 tabular-nums" style={{ fontVariantNumeric: "tabular-nums" }}>
@@ -277,14 +358,23 @@ export default function AnomaliesView() {
                           {ruleLabel(item.rule_code)}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-right">
+                        <span
+                          className="inline-flex items-center justify-center min-w-[2.25rem] px-2 py-0.5 rounded-full text-xs font-bold tabular-nums"
+                          style={{ background: sv.bg, color: sv.fg, fontVariantNumeric: "tabular-nums" }}
+                        >
+                          {item.occurrence_count.toLocaleString()}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>
                         {item.detail}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="text-center py-10 text-sm" style={{ color: "var(--text-faint)" }}>
+                      <td colSpan={7} className="text-center py-10 text-sm" style={{ color: "var(--text-faint)" }}>
                         조건에 맞는 특이건이 없습니다.
                       </td>
                     </tr>
