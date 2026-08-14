@@ -3,18 +3,32 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   fetchAnomalies,
+  fetchAnomaliesTopPeople,
   fetchAnomaliesTrend,
   fetchMonths,
+  type AnomalyItem,
+  type AnomalyTopPerson,
   type AnomalyTrendItem,
   type AnomaliesResponse,
+  type CaseStatus,
   type EmployeeMatch,
 } from "@/lib/api";
+import AnomalyDetailCell from "./AnomalyDetailCell";
 import RuleCountChart, { ruleLabel } from "./RuleCountChart";
 import OrgFilter from "./OrgFilter";
 import EmployeePicker from "./EmployeePicker";
 import RulesMetaModal from "./RulesMetaModal";
 import MonthlyTrendChart from "./MonthlyTrendChart";
+import PeriodSelect from "./PeriodSelect";
+import TopPeopleBanner, { type BannerItem } from "./TopPeopleBanner";
+import CaseStatusToggle from "./CaseStatusToggle";
 import { SEVERITY_STYLE, severityTier } from "@/lib/severity";
+
+const WARNING_ICON = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M10.29 3.86l-8.18 14.18A2 2 0 0 0 3.82 21h16.36a2 2 0 0 0 1.71-3l-8.18-14.14a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
 
 function StatTile({
   label,
@@ -104,17 +118,34 @@ export default function AnomaliesView() {
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [trend, setTrend] = useState<AnomalyTrendItem[] | null>(null);
+  const [topPeople, setTopPeople] = useState<AnomalyTopPerson[] | null>(null);
 
   useEffect(() => {
     fetchMonths().then(setMonths);
   }, []);
 
-  // 조회 중인 월의 연도를 기준으로 그 해 월별 추이를 가져온다.
+  // 가장 최근 데이터 기준 근태 특이자 상위 5명 — 사업부/부서 필터를 선택하면 그 범위로 좁혀진다.
+  useEffect(() => {
+    fetchAnomaliesTopPeople({
+      division: division ?? undefined,
+      department: department ?? undefined,
+      limit: 5,
+    })
+      .then((res) => setTopPeople(res.items))
+      .catch(() => setTopPeople(null));
+  }, [division, department]);
+
+  // 조회 중인 월의 연도를 기준으로 그 해 월별 추이를 가져온다. 사업부/부서를 선택하면
+  // 그 하위 트리 범위로만 집계해서, 필터를 바꾸면 그래프도 같이 좁혀지게 한다.
   useEffect(() => {
     const year = (month ?? months[months.length - 1] ?? "").slice(0, 4);
     if (!year) return;
-    fetchAnomaliesTrend(year).then(setTrend);
-  }, [month, months]);
+    fetchAnomaliesTrend({
+      year,
+      division: division ?? undefined,
+      department: department ?? undefined,
+    }).then(setTrend);
+  }, [month, months, division, department]);
 
   useEffect(() => {
     setData(null);
@@ -157,6 +188,19 @@ export default function AnomaliesView() {
 
   const visible = showAll ? filtered : filtered.slice(0, PAGE_SIZE);
   const hasMore = filtered.length > PAGE_SIZE;
+
+  function handleStatusChange(item: AnomalyItem, next: CaseStatus | null) {
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            items: prev.items.map((it) =>
+              it.사번 === item.사번 && it.rule_code === item.rule_code ? { ...it, status: next ?? "" } : it
+            ),
+          }
+        : prev
+    );
+  }
   // 심각도 배지 색은 "지금 조회 중인 전체 데이터"(필터 전) 기준으로 고정해서
   // 규칙 필터를 바꿔도 같은 건이 계속 같은 색으로 보이게 한다.
   const maxOccurrence = data ? Math.max(...data.items.map((i) => i.occurrence_count), 1) : 1;
@@ -171,18 +215,7 @@ export default function AnomaliesView() {
       >
         <div className="flex flex-wrap items-center gap-3">
           {months.length > 1 && (
-            <select
-              value={month ?? ""}
-              onChange={(e) => setMonth(e.target.value)}
-              className="px-3 py-1.5 rounded-lg text-sm outline-none"
-              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
-            >
-              {months.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
+            <PeriodSelect periods={months} periodKind="month" value={month} onChange={setMonth} label="조회 월" />
           )}
           <OrgFilter
             division={division}
@@ -215,9 +248,28 @@ export default function AnomaliesView() {
         )}
       </div>
 
+      <TopPeopleBanner
+        heading="근태 특이자 TOP 5"
+        subheading="최신 데이터 기준"
+        icon={WARNING_ICON}
+        tone="critical"
+        items={
+          topPeople?.map(
+            (p): BannerItem => ({
+              name: p.성명,
+              dept: p.부서명,
+              division: p.사업부,
+              rankTitle: p.직급,
+              metricLabel: `${p.total_occurrences}회`,
+              metricSub: `${p.rule_count}개 규칙`,
+            })
+          ) ?? null
+        }
+      />
+
       {trend && (
         <MonthlyTrendChart
-          title={`${(month ?? "").slice(0, 4)}년 월별 특이건 추이`}
+          title={`${(month ?? "").slice(0, 4)}년 ${department ?? division ?? "전사"} 월별 특이건 추이`}
           points={trend.map((t) => ({ label: `${Number(t.month.slice(5, 7))}월`, value: t.total }))}
           emptyHint="이번 해에 업로드된 데이터가 아직 없습니다."
         />
@@ -328,6 +380,7 @@ export default function AnomaliesView() {
                     <th className="text-left font-medium px-4 py-3 whitespace-nowrap">특이사례 케이스</th>
                     <th className="text-right font-medium px-4 py-3 whitespace-nowrap">발생</th>
                     <th className="text-left font-medium px-4 py-3 whitespace-nowrap">상세</th>
+                    <th className="text-left font-medium px-4 py-3 whitespace-nowrap">처리 상태</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -366,15 +419,24 @@ export default function AnomaliesView() {
                           {item.occurrence_count.toLocaleString()}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>
-                        {item.detail}
+                      <td className="px-4 py-3">
+                        <AnomalyDetailCell detail={item.detail} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <CaseStatusToggle
+                          empId={item.사번}
+                          ruleCode={item.rule_code}
+                          month={data.month ?? month ?? ""}
+                          status={item.status}
+                          onChange={(next) => handleStatusChange(item, next)}
+                        />
                       </td>
                     </tr>
                     );
                   })}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="text-center py-10 text-sm" style={{ color: "var(--text-faint)" }}>
+                      <td colSpan={8} className="text-center py-10 text-sm" style={{ color: "var(--text-faint)" }}>
                         조건에 맞는 특이건이 없습니다.
                       </td>
                     </tr>

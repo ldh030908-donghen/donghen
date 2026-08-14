@@ -4,12 +4,14 @@ import { useState } from "react";
 import type { Overview } from "@/lib/api";
 import { resetData } from "@/lib/api";
 import AnomaliesView from "./AnomaliesView";
+import CandidatesView from "./CandidatesView";
+import EmployeeTimelineView from "./EmployeeTimelineView";
 import HoursSummaryView from "./HoursSummaryView";
 import EmptyState from "./EmptyState";
 import Modal from "./Modal";
 import UploadFlow from "./UploadFlow";
 
-type Tab = "anomalies" | "hours";
+type Tab = "anomalies" | "hours" | "candidates" | "timeline";
 
 export default function Dashboard({
   overview,
@@ -82,6 +84,26 @@ export default function Dashboard({
               >
                 근무시간 현황 조회
               </button>
+              <button
+                onClick={() => setTab("candidates")}
+                className="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                style={{
+                  background: tab === "candidates" ? "var(--accent)" : "transparent",
+                  color: tab === "candidates" ? "#fff" : "var(--text-muted)",
+                }}
+              >
+                확인대상
+              </button>
+              <button
+                onClick={() => setTab("timeline")}
+                className="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                style={{
+                  background: tab === "timeline" ? "var(--accent)" : "transparent",
+                  color: tab === "timeline" ? "#fff" : "var(--text-muted)",
+                }}
+              >
+                개인별 히스토리
+              </button>
             </div>
           )}
           <button
@@ -98,6 +120,8 @@ export default function Dashboard({
         <>
           {tab === "anomalies" && <AnomaliesView />}
           {tab === "hours" && <HoursSummaryView />}
+          {tab === "candidates" && <CandidatesView />}
+          {tab === "timeline" && <EmployeeTimelineView />}
         </>
       ) : (
         <EmptyState onUploadClick={() => setShowUpload(true)} />

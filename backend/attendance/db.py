@@ -74,6 +74,17 @@ CREATE TABLE IF NOT EXISTS division_map (
     부서명 TEXT PRIMARY KEY,
     사업부 TEXT NOT NULL
 );
+
+-- 특이건/확인대상 케이스별 처리 상태(확인/조치완료/오탐). 케이스는 (사번, rule_code, 월) 단위로 식별한다.
+CREATE TABLE IF NOT EXISTS case_status (
+    사번 TEXT NOT NULL,
+    rule_code TEXT NOT NULL,
+    month TEXT NOT NULL,
+    status TEXT NOT NULL,
+    note TEXT,
+    updated_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (사번, rule_code, month)
+);
 """
 
 
@@ -173,7 +184,45 @@ def reset_all() -> None:
     with get_conn() as conn:
         conn.execute("DELETE FROM daily_records")
         conn.execute("DELETE FROM upload_log")
+        conn.execute("DELETE FROM case_status")
     _touch()
+
+
+_VALID_CASE_STATUSES = {"checked", "resolved", "false_positive"}
+
+
+def set_case_status(emp_id: str, rule_code: str, month: str, status: "str | None", note: "str | None" = None) -> None:
+    """케이스 처리 상태를 저장한다. status가 None이면(미확인으로 되돌리기) 기록을 삭제한다.
+
+    근태 데이터 자체는 안 바뀌므로 data_version()은 건드리지 않는다 — 만약 건드리면 상태 하나
+    바꿀 때마다 규칙 7종 재계산 캐시가 통째로 무효화돼서 매번 몇 초씩 다시 돈다.
+    """
+    with get_conn() as conn:
+        if status is None:
+            conn.execute(
+                "DELETE FROM case_status WHERE 사번=? AND rule_code=? AND month=?",
+                (emp_id, rule_code, month),
+            )
+        else:
+            if status not in _VALID_CASE_STATUSES:
+                raise ValueError(f"알 수 없는 상태: {status}")
+            conn.execute(
+                "INSERT INTO case_status (사번, rule_code, month, status, note, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, datetime('now')) "
+                "ON CONFLICT(사번, rule_code, month) DO UPDATE SET status=excluded.status, "
+                "note=excluded.note, updated_at=excluded.updated_at",
+                (emp_id, rule_code, month, status, note),
+            )
+
+
+def get_case_statuses(month: "str | None" = None) -> pd.DataFrame:
+    """케이스 상태 전체(또는 특정 월)를 DataFrame으로 반환. 컬럼: 사번, rule_code, month, status, note."""
+    with get_conn() as conn:
+        if month:
+            return pd.read_sql_query(
+                "SELECT 사번, rule_code, month, status, note FROM case_status WHERE month = ?", conn, params=(month,)
+            )
+        return pd.read_sql_query("SELECT 사번, rule_code, month, status, note FROM case_status", conn)
 
 
 def get_upload_history() -> pd.DataFrame:

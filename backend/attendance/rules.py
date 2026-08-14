@@ -68,11 +68,11 @@ def rule1_monthly_max_hours(
         over_stay = metric in ("stay", "both") and r["stay_hours"] > r["threshold_hours"]
         if not (over_worktime or over_stay):
             continue
-        detail_parts = [f"기준 {r['threshold_hours']:.1f}h"]
+        detail_parts = [f"기준 {r['threshold_hours']:.2f}h"]
         if over_worktime:
-            detail_parts.append(f"실근로시간(K열) {r['worktime_hours']:.1f}h 초과")
+            detail_parts.append(f"실근로시간(K열) {r['worktime_hours']:.2f}h 초과")
         if over_stay:
-            detail_parts.append(f"체류시간(N열) {r['stay_hours']:.1f}h 초과")
+            detail_parts.append(f"체류시간(N열) {r['stay_hours']:.2f}h 초과")
         rows.append(
             {
                 C.COL_EMP_ID: r[C.COL_EMP_ID],
@@ -164,7 +164,7 @@ def rule3_excessive_exclude_time(
         parts = []
         group_label = "본사" if r["is_hq_flex"] else "현장"
         if r["exclude_hours"] > r["hour_threshold"]:
-            parts.append(f"월 누적 {r['exclude_hours']:.1f}h (기준 {group_label} {r['hour_threshold']:.0f}h 초과)")
+            parts.append(f"월 누적 {r['exclude_hours']:.2f}h (기준 {group_label} {r['hour_threshold']:.2f}h 초과)")
         if r["excess_days"] >= count_threshold:
             parts.append(f"정상치 초과일 {int(r['excess_days'])}회 (기준 {count_threshold}회 이상)")
         return " / ".join(parts)
@@ -263,8 +263,8 @@ def rule5_month_end_exclude_bulk_pattern(
                         "rule_code": "R5_MONTHEND_EXCLUDE",
                         "case_name": "월말 제외시간 일괄 입력 의심",
                         "detail": (
-                            f"{r[C.COL_DATE]} 제외시간 {val/60:.1f}h "
-                            f"(평소 {typical/60:.1f}h와 다름)" if typical else f"{r[C.COL_DATE]} 제외시간 {val/60:.1f}h"
+                            f"{r[C.COL_DATE]} 제외시간 {val/60:.2f}h "
+                            f"(평소 {typical/60:.2f}h와 다름)" if typical else f"{r[C.COL_DATE]} 제외시간 {val/60:.2f}h"
                         ),
                         "occurrence_count": 1,
                     }
@@ -383,7 +383,7 @@ def rule7_consecutive_long_stay(
                 "case_name": "연속 장시간 근무",
                 "detail": (
                     f"{sub.iloc[0][C.COL_DATE]}~{sub.iloc[-1][C.COL_DATE]} "
-                    f"{run_len}일 연속 {daily_threshold_minutes/60:.0f}시간 이상 체류"
+                    f"{run_len}일 연속 {daily_threshold_minutes/60:.2f}시간 이상 체류"
                 ),
                 "occurrence_count": run_len,
             }

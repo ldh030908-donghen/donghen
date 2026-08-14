@@ -1,6 +1,6 @@
 // 사내망 등 다른 기기에서 접속해도 지금 브라우저 주소의 호스트를 그대로 따라가서
 // API를 찾도록 한다 (localhost로 고정하면 다른 PC에서 열었을 때 자기 자신을 가리키게 됨).
-const API_BASE =
+export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ??
   (typeof window !== "undefined" ? `http://${window.location.hostname}:8000` : "http://localhost:8000");
 
@@ -27,6 +27,8 @@ export type Overview =
       avg_hours_per_employee_per_month: number;
     };
 
+export type CaseStatus = "checked" | "resolved" | "false_positive";
+
 export type AnomalyItem = {
   사번: string;
   사업부: string;
@@ -37,6 +39,8 @@ export type AnomalyItem = {
   case_name: string;
   detail: string;
   occurrence_count: number;
+  status?: CaseStatus | "";
+  note?: string;
 };
 
 export type AnomaliesResponse = {
@@ -119,6 +123,32 @@ export async function fetchRulesMeta(): Promise<RuleMeta[]> {
   return res.rules;
 }
 
+export type CandidateMeta = { candidate_code: string; case_name: string; description: string };
+
+export async function fetchCandidatesMeta(): Promise<CandidateMeta[]> {
+  const res = await request<{ candidates: CandidateMeta[] }>("/api/candidates/meta");
+  return res.candidates;
+}
+
+// 확인대상 응답도 특이건과 동일한 모양(AnomalyItem/AnomaliesResponse)을 쓴다 — 백엔드가 같은 스키마로 내려준다.
+export async function fetchCandidates(params: {
+  month?: string;
+  division?: string;
+  department?: string;
+  empId?: string;
+}): Promise<AnomaliesResponse> {
+  const qs = new URLSearchParams();
+  if (params.month) qs.set("month", params.month);
+  if (params.division) qs.set("division", params.division);
+  if (params.department) qs.set("department", params.department);
+  if (params.empId) qs.set("emp_id", params.empId);
+  return request<AnomaliesResponse>(`/api/candidates?${qs.toString()}`);
+}
+
+export async function fetchHighlights(limit = 8): Promise<{ month: string | null; items: AnomalyItem[] }> {
+  return request(`/api/highlights?limit=${limit}`);
+}
+
 export async function fetchDivisions(): Promise<string[]> {
   const res = await request<{ divisions: string[] }>("/api/org/divisions");
   return res.divisions;
@@ -128,6 +158,11 @@ export async function fetchDepartments(division?: string): Promise<string[]> {
   const qs = division ? `?division=${encodeURIComponent(division)}` : "";
   const res = await request<{ departments: string[] }>(`/api/org/departments${qs}`);
   return res.departments;
+}
+
+export async function fetchWorkGroups(): Promise<string[]> {
+  const res = await request<{ workgroups: string[] }>("/api/org/workgroups");
+  return res.workgroups;
 }
 
 export async function searchEmployees(q: string): Promise<EmployeeMatch[]> {
@@ -148,32 +183,207 @@ export type HoursTrendItem = {
   employee_count: number;
 };
 
-export async function fetchAnomaliesTrend(year?: string): Promise<AnomalyTrendItem[]> {
-  const qs = year ? `?year=${encodeURIComponent(year)}` : "";
-  const res = await request<{ items: AnomalyTrendItem[] }>(`/api/anomalies/trend${qs}`);
+export async function fetchAnomaliesTrend(params: {
+  year?: string;
+  division?: string;
+  department?: string;
+}): Promise<AnomalyTrendItem[]> {
+  const qs = new URLSearchParams();
+  if (params.year) qs.set("year", params.year);
+  if (params.division) qs.set("division", params.division);
+  if (params.department) qs.set("department", params.department);
+  const res = await request<{ items: AnomalyTrendItem[] }>(`/api/anomalies/trend?${qs.toString()}`);
   return res.items;
 }
 
-export async function fetchHoursTrend(year?: string, metric: Metric = "worktime"): Promise<HoursTrendItem[]> {
-  const qs = new URLSearchParams({ metric });
-  if (year) qs.set("year", year);
+export async function fetchHoursTrend(params: {
+  year?: string;
+  metric?: Metric;
+  division?: string;
+  department?: string;
+  workGroup?: string;
+}): Promise<HoursTrendItem[]> {
+  const qs = new URLSearchParams({ metric: params.metric ?? "worktime" });
+  if (params.year) qs.set("year", params.year);
+  if (params.division) qs.set("division", params.division);
+  if (params.department) qs.set("department", params.department);
+  if (params.workGroup) qs.set("work_group", params.workGroup);
   const res = await request<{ items: HoursTrendItem[] }>(`/api/hours-trend?${qs.toString()}`);
   return res.items;
+}
+
+export type AnomalyTopPerson = {
+  사번: string;
+  사업부: string;
+  부서명: string;
+  성명: string;
+  직급: string;
+  total_occurrences: number;
+  rule_count: number;
+};
+
+export async function fetchAnomaliesTopPeople(params: {
+  month?: string;
+  division?: string;
+  department?: string;
+  limit?: number;
+}): Promise<{ month: string | null; items: AnomalyTopPerson[] }> {
+  const qs = new URLSearchParams();
+  if (params.month) qs.set("month", params.month);
+  if (params.division) qs.set("division", params.division);
+  if (params.department) qs.set("department", params.department);
+  qs.set("limit", String(params.limit ?? 5));
+  return request(`/api/anomalies/top-people?${qs.toString()}`);
+}
+
+export type HoursTopPerson = {
+  사업부: string;
+  부서명: string;
+  사번: string;
+  성명: string;
+  직급: string;
+  period: string;
+  avg_hours_per_employee_per_month: number;
+  total_hours: number;
+};
+
+export async function fetchHoursTopPeople(params: {
+  periodKind?: PeriodKind;
+  periodValue?: string;
+  metric?: Metric;
+  division?: string;
+  department?: string;
+  workGroup?: string;
+  limit?: number;
+}): Promise<{ period: string | null; items: HoursTopPerson[] }> {
+  const qs = new URLSearchParams({ period_kind: params.periodKind ?? "month", metric: params.metric ?? "worktime" });
+  if (params.periodValue) qs.set("period_value", params.periodValue);
+  if (params.division) qs.set("division", params.division);
+  if (params.department) qs.set("department", params.department);
+  if (params.workGroup) qs.set("work_group", params.workGroup);
+  qs.set("limit", String(params.limit ?? 5));
+  return request(`/api/hours-summary/top-people?${qs.toString()}`);
+}
+
+export type HrNewsItem = {
+  title: string;
+  url: string;
+  source: string | null;
+  published_at: string | null;
+};
+
+export async function fetchHrNews(): Promise<HrNewsItem[]> {
+  const res = await request<{ items: HrNewsItem[] }>("/api/hr-news");
+  return res.items;
+}
+
+export type ChatMessage = { role: "user" | "assistant"; content: string };
+
+export type ChatResult = {
+  kind: string;
+  items?: Record<string, unknown>[];
+  [key: string]: unknown;
+} | null;
+
+export type ChatExport = { kind: string; params: Record<string, unknown> } | null;
+
+export type ChatStep = { label: string };
+
+export type ChatResponse = {
+  reply: string;
+  result: ChatResult;
+  export: ChatExport;
+  steps: ChatStep[];
+  reference: string | null;
+};
+
+export async function sendChatMessage(
+  message: string,
+  history: ChatMessage[]
+): Promise<ChatResponse> {
+  return request<ChatResponse>("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, history }),
+  });
+}
+
+export function buildExportUrl(exp: { kind: string; params: Record<string, unknown> }): string {
+  const qs = new URLSearchParams({ kind: exp.kind });
+  for (const [k, v] of Object.entries(exp.params)) {
+    if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+  }
+  return `${API_BASE}/api/export?${qs.toString()}`;
 }
 
 export async function fetchHoursSummary(params: {
   groupLevel: GroupLevel;
   periodKind: PeriodKind;
+  periodValue?: string;
   metric?: Metric;
   division?: string;
   department?: string;
+  workGroup?: string;
 }): Promise<{ items: HoursSummaryItem[] }> {
   const qs = new URLSearchParams({
     group_level: params.groupLevel,
     period_kind: params.periodKind,
     metric: params.metric ?? "worktime",
   });
+  if (params.periodValue) qs.set("period_value", params.periodValue);
   if (params.division) qs.set("division", params.division);
   if (params.department) qs.set("department", params.department);
+  if (params.workGroup) qs.set("work_group", params.workGroup);
   return request(`/api/hours-summary?${qs.toString()}`);
+}
+
+export async function fetchPeriods(periodKind: PeriodKind): Promise<string[]> {
+  const res = await request<{ periods: string[] }>(
+    `/api/periods?period_kind=${encodeURIComponent(periodKind)}`
+  );
+  return res.periods;
+}
+
+export async function updateCaseStatus(params: {
+  empId: string;
+  ruleCode: string;
+  month: string;
+  status: CaseStatus | null;
+  note?: string;
+}): Promise<void> {
+  await request<{ ok: boolean }>("/api/case-status", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      emp_id: params.empId,
+      rule_code: params.ruleCode,
+      month: params.month,
+      status: params.status,
+      note: params.note,
+    }),
+  });
+}
+
+export type EmployeeTimelineItem = AnomalyItem & {
+  month: string;
+  source: "rule" | "candidate";
+};
+
+export type EmployeeProfile = {
+  사번: string;
+  사업부: string;
+  부서명: string;
+  성명: string;
+  직급: string;
+};
+
+export type EmployeeTimeline = {
+  emp_id: string;
+  profile: EmployeeProfile | null;
+  items: EmployeeTimelineItem[];
+  hours_trend: { month: string; hours: number }[];
+};
+
+export async function fetchEmployeeTimeline(empId: string): Promise<EmployeeTimeline> {
+  return request<EmployeeTimeline>(`/api/employee-timeline?emp_id=${encodeURIComponent(empId)}`);
 }

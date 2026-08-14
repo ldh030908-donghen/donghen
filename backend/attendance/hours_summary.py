@@ -64,8 +64,11 @@ def summarize_worktime(
     # 1단계: 인원 x 기간 단위로 먼저 합산 (인원별 누적치를 정확히 세기 위함).
     # 개월수는 '데이터에 실제로 존재하는 달 수'로 세서, 분기/반기/연 일부만 데이터가
     # 있는 경우(예: 이번 더미처럼 1개월치뿐)에도 월평균이 왜곡되지 않게 한다.
+    # group_level="employee"일 땐 group_cols에 이미 사번이 들어있으므로 중복 추가하지 않는다
+    # (중복되면 groupby().reset_index()에서 "cannot insert 사번, already exists" 오류가 남).
+    person_group_cols = list(dict.fromkeys(group_cols + [C.COL_EMP_ID]))
     per_person_period = (
-        d.groupby(group_cols + [C.COL_EMP_ID, period_col])
+        d.groupby(person_group_cols + [period_col])
         .agg(
             person_period_minutes=(metric_col, "sum"),
             months_present=("period_month", "nunique"),
