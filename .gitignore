@@ -13,12 +13,14 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 coverage/
+dev.log
 
 # Python / backend
 __pycache__/
 *.pyc
 venv/
 .venv/
+server.log
 
 # Env files
 .env
