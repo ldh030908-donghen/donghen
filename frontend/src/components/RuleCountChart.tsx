@@ -14,6 +14,21 @@ export function ruleLabel(code: string): string {
   return CASE_LABELS[code] ?? code;
 }
 
+const RULE_COLORS: Record<string, string> = {
+  R1_MONTHLY_MAX: "#2f6fed",
+  R2_CHECKIN_GAP: "#059669",
+  R3_EXCLUDE_EXCESS: "#d97706",
+  R4_CORE_TIME: "#dc2626",
+  R5_MONTHEND_EXCLUDE: "#7c3aed",
+  R6_BADGE_INTEGRITY: "#0891b2",
+  R7_CONSECUTIVE_LONG_STAY: "#ea580c",
+};
+const FALLBACK_COLORS = ["#2f6fed", "#059669", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#ea580c"];
+
+export function ruleColor(code: string, index = 0): string {
+  return RULE_COLORS[code] ?? FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+}
+
 export default function RuleCountChart({
   byRule,
   activeRule,

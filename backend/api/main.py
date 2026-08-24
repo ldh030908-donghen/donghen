@@ -386,6 +386,7 @@ def get_months():
 @app.get("/api/anomalies")
 def get_anomalies(
     month: Optional[str] = None,
+    year: Optional[str] = None,
     division: Optional[str] = None,
     department: Optional[str] = None,
     emp_id: Optional[str] = None,
@@ -395,6 +396,34 @@ def get_anomalies(
         return {"total": 0, "affected_employees": 0, "by_rule": {}, "items": [], "month": None}
 
     months = _available_months(df)
+
+    # year만 주어지면(month 미지정) 그 해 1~12월 데이터를 전부 모아서 보여준다 (연도별 조회).
+    if year and not month:
+        year_months = [m for m in months if m.startswith(year)]
+        frames = []
+        for m in year_months:
+            r = _compute_month_anomalies(m)
+            if division:
+                r = r[r[DIVISION_COL] == division]
+            if department:
+                r = r[r[C.COL_DEPT] == department]
+            if emp_id:
+                r = r[r[C.COL_EMP_ID] == emp_id]
+            r = _attach_case_status(r, m)
+            if len(r):
+                r = r.copy()
+                r["month"] = m
+                frames.append(r)
+        result = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        result = result.fillna("")
+        return {
+            "month": year,
+            "total": len(result),
+            "affected_employees": int(result[C.COL_EMP_ID].nunique()) if len(result) else 0,
+            "by_rule": result["rule_code"].value_counts().to_dict() if len(result) else {},
+            "items": result.to_dict(orient="records"),
+        }
+
     target_month = month or months[-1]
     result = _compute_month_anomalies(target_month)
 

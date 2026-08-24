@@ -45,8 +45,11 @@ export default function NewsBanner() {
       )}
 
       {items && items.length === 0 && (
-        <div className="flex-1 flex items-center text-[11px]" style={{ color: "var(--text-faint)" }}>
-          표시할 뉴스가 없습니다.
+        <div className="flex-1 flex flex-col items-center justify-center text-center gap-1 py-1">
+          <span style={{ color: "var(--accent)", opacity: 0.5 }}>{NEWS_ICON}</span>
+          <div className="text-[11px]" style={{ color: "var(--text-faint)" }}>
+            지금은 표시할 뉴스가 없어요
+          </div>
         </div>
       )}
 

@@ -10,20 +10,28 @@ import HoursSummaryView from "./HoursSummaryView";
 import EmptyState from "./EmptyState";
 import Modal from "./Modal";
 import UploadFlow from "./UploadFlow";
+import { SideNavToggle } from "./SideNav";
 
-type Tab = "anomalies" | "hours" | "candidates" | "timeline";
+export type Tab = "anomalies" | "hours" | "candidates" | "timeline" | "settings";
 
 export default function Dashboard({
   overview,
   onDataChanged,
+  tab,
+  showUpload,
+  onShowUploadChange,
+  onOpenNav,
 }: {
   overview: Overview;
   onDataChanged: () => void;
+  tab: Tab;
+  showUpload: boolean;
+  onShowUploadChange: (v: boolean) => void;
+  onOpenNav: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>("anomalies");
-  const [showUpload, setShowUpload] = useState(false);
   const [resetting, setResetting] = useState(false);
   const hasData = overview.has_data;
+  const setShowUpload = onShowUploadChange;
 
   async function handleReset() {
     if (!window.confirm("업로드된 근태 데이터를 전부 삭제할까요? 되돌릴 수 없습니다.")) return;
@@ -39,8 +47,9 @@ export default function Dashboard({
 
   return (
     <div className="w-full max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
         <div className="flex items-center gap-3">
+          <SideNavToggle onClick={onOpenNav} />
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
             style={{ background: "linear-gradient(135deg, var(--accent) 0%, #4a89f5 100%)", boxShadow: "var(--shadow-glow)" }}
@@ -50,62 +59,10 @@ export default function Dashboard({
             </svg>
           </div>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">근태 분석 대시보드</h1>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-faint)" }}>
-              {hasData
-                ? `누적 ${overview.total_employee_count.toLocaleString()}명 · 최신 ${overview.latest_month} 기준 ${overview.employee_count.toLocaleString()}명 · 보유 데이터 ${overview.available_months.length}개월`
-                : "업로드된 데이터 없음"}
-            </p>
+            <h1 className="text-2xl md:text-[32px] font-bold tracking-tight leading-tight">근태 분석 대시보드</h1>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {hasData && (
-            <div
-              className="inline-flex p-1 rounded-lg gap-1"
-              style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}
-            >
-              <button
-                onClick={() => setTab("anomalies")}
-                className="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                style={{
-                  background: tab === "anomalies" ? "var(--accent)" : "transparent",
-                  color: tab === "anomalies" ? "#fff" : "var(--text-muted)",
-                }}
-              >
-                근태 특이건 조회
-              </button>
-              <button
-                onClick={() => setTab("hours")}
-                className="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                style={{
-                  background: tab === "hours" ? "var(--accent)" : "transparent",
-                  color: tab === "hours" ? "#fff" : "var(--text-muted)",
-                }}
-              >
-                근무시간 현황 조회
-              </button>
-              <button
-                onClick={() => setTab("candidates")}
-                className="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                style={{
-                  background: tab === "candidates" ? "var(--accent)" : "transparent",
-                  color: tab === "candidates" ? "#fff" : "var(--text-muted)",
-                }}
-              >
-                확인대상
-              </button>
-              <button
-                onClick={() => setTab("timeline")}
-                className="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                style={{
-                  background: tab === "timeline" ? "var(--accent)" : "transparent",
-                  color: tab === "timeline" ? "#fff" : "var(--text-muted)",
-                }}
-              >
-                개인별 히스토리
-              </button>
-            </div>
-          )}
           <button
             onClick={() => setShowUpload(true)}
             className="px-4 py-2 rounded-lg text-sm font-medium transition-transform hover:-translate-y-px"
@@ -116,12 +73,30 @@ export default function Dashboard({
         </div>
       </div>
 
+      {hasData && (
+        <>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span style={{ color: "var(--accent)" }}>{TAB_META[tab].icon}</span>
+            <h2 className="text-lg font-semibold tracking-tight">{TAB_META[tab].label}</h2>
+          </div>
+          <p className="text-xs mb-4" style={{ color: "var(--text-faint)" }}>
+            {TAB_META[tab].description}
+          </p>
+          <div className="flex items-center gap-2 flex-wrap mb-8">
+            <SummaryChip icon={PEOPLE_CHIP_ICON} text={`누적 ${overview.total_employee_count.toLocaleString()}명`} />
+            <SummaryChip icon={CALENDAR_CHIP_ICON} text={`최신 ${overview.latest_month} 기준 ${overview.employee_count.toLocaleString()}명`} />
+            <SummaryChip icon={DB_CHIP_ICON} text={`보유 데이터 ${overview.available_months.length}개월`} />
+          </div>
+        </>
+      )}
+
       {hasData ? (
         <>
           {tab === "anomalies" && <AnomaliesView />}
           {tab === "hours" && <HoursSummaryView />}
           {tab === "candidates" && <CandidatesView />}
           {tab === "timeline" && <EmployeeTimelineView />}
+          {tab === "settings" && <SettingsPlaceholder />}
         </>
       ) : (
         <EmptyState onUploadClick={() => setShowUpload(true)} />
@@ -151,6 +126,110 @@ export default function Dashboard({
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+const TAB_META: Record<Tab, { label: string; description: string; icon: React.ReactNode }> = {
+  anomalies: {
+    label: "근태 특이건 조회",
+    description: "출입문 로그 기반 근태 이상 패턴을 사업부 → 부서 → 개인 단위로 조회합니다.",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M10.29 3.86l-8.18 14.18A2 2 0 0 0 3.82 21h16.36a2 2 0 0 0 1.71-3l-8.18-14.14a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  hours: {
+    label: "근무시간 현황 조회",
+    description: "기간·조직 단위로 실근로시간/체류시간 현황을 조회합니다.",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 6v6l4 2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  candidates: {
+    label: "확인대상",
+    description: "특이건으로 확정되기 전, 사람이 한 번 더 확인해봐야 할 후보 케이스입니다.",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  timeline: {
+    label: "개인별 히스토리",
+    description: "특정 인원을 선택해 월별 근태 특이건/근무시간 이력을 확인합니다.",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 3v5h5M3.05 13A9 9 0 1 0 6 5.3L3 8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M12 7v5l4 2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  settings: {
+    label: "설정",
+    description: "조직도 매핑, 규칙 임계값 등 대시보드 설정입니다.",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+};
+
+const PEOPLE_CHIP_ICON = (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const CALENDAR_CHIP_ICON = (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <path d="M16 2v4M8 2v4M3 10h18" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const DB_CHIP_ICON = (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <ellipse cx="12" cy="5" rx="9" ry="3" />
+    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5M3 12c0 1.66 4 3 9 3s9-1.34 9-3" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+function SummaryChip({ icon, text }: { icon: React.ReactNode; text: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+      style={{ background: "var(--bg-elevated)", color: "var(--text-muted)", border: "1px solid var(--border)" }}
+    >
+      <span style={{ color: "var(--accent)" }}>{icon}</span>
+      {text}
+    </span>
+  );
+}
+
+function SettingsPlaceholder() {
+  return (
+    <div
+      className="rounded-2xl p-10 text-center flex flex-col items-center gap-3"
+      style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+    >
+      <div
+        className="w-12 h-12 rounded-xl flex items-center justify-center"
+        style={{ background: "var(--bg-elevated)", color: "var(--text-faint)" }}
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+      <div className="text-sm font-medium">설정 기능은 아직 준비 중입니다</div>
+      <p className="text-xs max-w-sm" style={{ color: "var(--text-faint)" }}>
+        조직도(사업부 매핑) 업로드, 규칙 임계값 조정 같은 설정 기능이 추후 이 화면에 추가될 예정입니다.
+      </p>
     </div>
   );
 }

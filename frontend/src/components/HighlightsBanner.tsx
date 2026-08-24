@@ -52,8 +52,11 @@ export default function HighlightsBanner() {
       )}
 
       {items && items.length === 0 && (
-        <div className="flex-1 flex items-center text-[11px]" style={{ color: "var(--text-faint)" }}>
-          이번 달엔 특별히 확인이 필요한 건이 없습니다.
+        <div className="flex-1 flex flex-col items-center justify-center text-center gap-1 py-1">
+          <span style={{ color: "var(--status-critical)", opacity: 0.5 }}>{FLAG_ICON}</span>
+          <div className="text-[11px]" style={{ color: "var(--text-faint)" }}>
+            이번 달엔 확인이 필요한 건이 없어요
+          </div>
         </div>
       )}
 

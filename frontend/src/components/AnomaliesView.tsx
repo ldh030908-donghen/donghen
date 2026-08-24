@@ -14,7 +14,8 @@ import {
   type EmployeeMatch,
 } from "@/lib/api";
 import AnomalyDetailCell from "./AnomalyDetailCell";
-import RuleCountChart, { ruleLabel } from "./RuleCountChart";
+import RuleCountChart, { ruleLabel, ruleColor } from "./RuleCountChart";
+import DonutChart from "./DonutChart";
 import OrgFilter from "./OrgFilter";
 import EmployeePicker from "./EmployeePicker";
 import RulesMetaModal from "./RulesMetaModal";
@@ -22,6 +23,7 @@ import MonthlyTrendChart from "./MonthlyTrendChart";
 import PeriodSelect from "./PeriodSelect";
 import TopPeopleBanner, { type BannerItem } from "./TopPeopleBanner";
 import CaseStatusToggle from "./CaseStatusToggle";
+import Modal from "./Modal";
 import { SEVERITY_STYLE, severityTier } from "@/lib/severity";
 
 const WARNING_ICON = (
@@ -35,12 +37,15 @@ function StatTile({
   value,
   icon,
   tone = "neutral",
+  emphasize = false,
   onClick,
 }: {
   label: string;
   value: string;
   icon: React.ReactNode;
   tone?: "neutral" | "accent" | "critical";
+  /** 우선순위 높은 핵심 지표(총 특이건/특이 인원)를 시각적으로 더 두드러지게 보여준다. */
+  emphasize?: boolean;
   onClick?: () => void;
 }) {
   const Comp = onClick ? "button" : "div";
@@ -49,17 +54,19 @@ function StatTile({
   return (
     <Comp
       onClick={onClick}
-      className="rounded-2xl p-5 text-left w-full transition-transform"
+      className={`rounded-2xl text-left w-full transition-transform ${emphasize ? "p-6" : "p-5"}`}
       style={{
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        boxShadow: "var(--shadow-sm)",
+        background: emphasize
+          ? `linear-gradient(160deg, ${iconBg} 0%, var(--surface) 65%)`
+          : "var(--surface)",
+        border: emphasize ? `1px solid ${tone === "critical" ? "var(--status-critical)" : "var(--accent)"}33` : "1px solid var(--border)",
+        boxShadow: emphasize ? "var(--shadow-glow)" : "var(--shadow-sm)",
         cursor: onClick ? "pointer" : "default",
       }}
     >
       <div className="flex items-center justify-between mb-3">
         <div
-          className="w-9 h-9 rounded-lg flex items-center justify-center"
+          className={emphasize ? "w-11 h-11 rounded-xl flex items-center justify-center" : "w-9 h-9 rounded-lg flex items-center justify-center"}
           style={{ background: iconBg, color: iconFg }}
         >
           {icon}
@@ -70,10 +77,13 @@ function StatTile({
           </span>
         )}
       </div>
-      <div className="text-xs mb-1" style={{ color: "var(--text-faint)" }}>
+      <div className={emphasize ? "text-xs font-medium mb-1" : "text-xs mb-1"} style={{ color: "var(--text-faint)" }}>
         {label}
       </div>
-      <div className="text-[28px] font-bold tracking-tight" style={{ color: "var(--text)" }}>
+      <div
+        className={emphasize ? "text-[36px] font-bold tracking-tight" : "text-[28px] font-bold tracking-tight"}
+        style={{ color: emphasize ? iconFg : "var(--text)" }}
+      >
         {value}
       </div>
     </Comp>
@@ -103,7 +113,8 @@ const ICONS = {
   ),
 };
 
-const PAGE_SIZE = 30;
+const PAGE_SIZE = 10;
+const EXPANDED_PAGE_SIZE = 25;
 
 export default function AnomaliesView() {
   const [division, setDivision] = useState<string | null>(null);
@@ -111,18 +122,35 @@ export default function AnomaliesView() {
   const [employee, setEmployee] = useState<EmployeeMatch | null>(null);
   const [months, setMonths] = useState<string[]>([]);
   const [month, setMonth] = useState<string | null>(null);
+  const [periodMode, setPeriodMode] = useState<"month" | "year">("month");
+  const [year, setYear] = useState<string | null>(null);
   const [data, setData] = useState<AnomaliesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeRule, setActiveRule] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [page, setPage] = useState(1);
   const [trend, setTrend] = useState<AnomalyTrendItem[] | null>(null);
+  const [trendMode, setTrendMode] = useState<"total" | "byRule">("total");
   const [topPeople, setTopPeople] = useState<AnomalyTopPerson[] | null>(null);
+  const [topPeopleMonth, setTopPeopleMonth] = useState<string | null>(null);
+
+  // 라인 차트 포인트 클릭 → 그 달 특이건 상세 모달
+  const [monthModal, setMonthModal] = useState<{ month: string; items: AnomalyItem[] | null; error?: string } | null>(null);
+  // TOP5 인물 클릭 → 그 인물의 특이건 상세 모달
+  const [personModal, setPersonModal] = useState<{ person: AnomalyTopPerson; items: AnomalyItem[] | null; error?: string } | null>(null);
+  // 요약 카드 클릭 → 부서별/유형별 breakdown 모달
+  const [breakdownModal, setBreakdownModal] = useState<{ title: string; rows: { label: string; count: number }[] } | null>(null);
 
   useEffect(() => {
     fetchMonths().then(setMonths);
   }, []);
+
+  const years = useMemo(
+    () => Array.from(new Set(months.map((m) => m.slice(0, 4)))),
+    [months]
+  );
 
   // 가장 최근 데이터 기준 근태 특이자 상위 5명 — 사업부/부서 필터를 선택하면 그 범위로 좁혀진다.
   useEffect(() => {
@@ -131,25 +159,47 @@ export default function AnomaliesView() {
       department: department ?? undefined,
       limit: 5,
     })
-      .then((res) => setTopPeople(res.items))
+      .then((res) => {
+        setTopPeople(res.items);
+        setTopPeopleMonth(res.month);
+      })
       .catch(() => setTopPeople(null));
   }, [division, department]);
 
   // 조회 중인 월의 연도를 기준으로 그 해 월별 추이를 가져온다. 사업부/부서를 선택하면
   // 그 하위 트리 범위로만 집계해서, 필터를 바꾸면 그래프도 같이 좁혀지게 한다.
   useEffect(() => {
-    const year = (month ?? months[months.length - 1] ?? "").slice(0, 4);
-    if (!year) return;
+    const trendYear =
+      periodMode === "year"
+        ? year ?? years[years.length - 1] ?? ""
+        : (month ?? months[months.length - 1] ?? "").slice(0, 4);
+    if (!trendYear) return;
     fetchAnomaliesTrend({
-      year,
+      year: trendYear,
       division: division ?? undefined,
       department: department ?? undefined,
     }).then(setTrend);
-  }, [month, months, division, department]);
+  }, [month, year, periodMode, months, years, division, department]);
 
   useEffect(() => {
     setData(null);
     setError(null);
+    if (periodMode === "year") {
+      const targetYear = year ?? years[years.length - 1];
+      if (!targetYear) return;
+      fetchAnomalies({
+        year: targetYear,
+        division: division ?? undefined,
+        department: department ?? undefined,
+        empId: employee?.사번,
+      })
+        .then((res) => {
+          setData(res);
+          if (!year) setYear(targetYear);
+        })
+        .catch((e) => setError(e.message));
+      return;
+    }
     fetchAnomalies({
       month: month ?? undefined,
       division: division ?? undefined,
@@ -161,8 +211,7 @@ export default function AnomaliesView() {
         if (!month) setMonth(res.month);
       })
       .catch((e) => setError(e.message));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month, division, department, employee?.사번]);
+  }, [periodMode, month, year, division, department, employee?.사번, years]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -181,12 +230,16 @@ export default function AnomaliesView() {
       .sort((a, b) => b.occurrence_count - a.occurrence_count);
   }, [data, activeRule, search]);
 
-  // 필터가 바뀌면 다시 요약(상위 30건)부터 보여준다.
+  // 필터가 바뀌면 다시 요약(상위 10건)부터 보여준다.
   useEffect(() => {
     setShowAll(false);
-  }, [activeRule, search, month, division, department, employee?.사번]);
+    setPage(1);
+  }, [activeRule, search, month, year, periodMode, division, department, employee?.사번]);
 
-  const visible = showAll ? filtered : filtered.slice(0, PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / EXPANDED_PAGE_SIZE));
+  const visible = showAll
+    ? filtered.slice((page - 1) * EXPANDED_PAGE_SIZE, page * EXPANDED_PAGE_SIZE)
+    : filtered.slice(0, PAGE_SIZE);
   const hasMore = filtered.length > PAGE_SIZE;
 
   function handleStatusChange(item: AnomalyItem, next: CaseStatus | null) {
@@ -207,6 +260,56 @@ export default function AnomaliesView() {
 
   const breadcrumb = [division, department, employee?.성명].filter(Boolean);
 
+  // 라인 차트에서 달을 클릭하면 그 달의 특이건 상세 리스트를 모달로 보여준다.
+  function handleTrendPointClick(pointMonth: string) {
+    setMonthModal({ month: pointMonth, items: null });
+    fetchAnomalies({
+      month: pointMonth,
+      division: division ?? undefined,
+      department: department ?? undefined,
+    })
+      .then((res) => setMonthModal({ month: pointMonth, items: res.items }))
+      .catch((e) => setMonthModal({ month: pointMonth, items: [], error: e.message }));
+  }
+
+  // TOP5 인물을 클릭하면 그 인물의 특이건(TOP5 산정 기준 월)을 모달로 보여준다.
+  function handleTopPersonClick(index: number) {
+    const person = topPeople?.[index];
+    if (!person || !topPeopleMonth) return;
+    setPersonModal({ person, items: null });
+    fetchAnomalies({ month: topPeopleMonth, empId: person.사번 })
+      .then((res) => setPersonModal({ person, items: res.items }))
+      .catch((e) => setPersonModal({ person, items: [], error: e.message }));
+  }
+
+  // 총 특이건/특이 인원 카드 클릭 → 지금 보고 있는 데이터를 부서별로 나눠서 보여준다.
+  function handleDeptBreakdown(title: string, mode: "count" | "distinct-employee") {
+    if (!data) return;
+    const byDept = new Map<string, Set<string> | number>();
+    for (const item of data.items) {
+      if (mode === "count") {
+        byDept.set(item.부서명, ((byDept.get(item.부서명) as number) ?? 0) + 1);
+      } else {
+        const set = (byDept.get(item.부서명) as Set<string>) ?? new Set<string>();
+        set.add(item.사번);
+        byDept.set(item.부서명, set);
+      }
+    }
+    const rows = Array.from(byDept.entries())
+      .map(([label, v]) => ({ label, count: v instanceof Set ? v.size : v }))
+      .sort((a, b) => b.count - a.count);
+    setBreakdownModal({ title, rows });
+  }
+
+  // 가장 많은 유형 카드 클릭 → 규칙별 건수 breakdown.
+  function handleRuleBreakdown() {
+    if (!data) return;
+    const rows = Object.entries(data.by_rule)
+      .map(([code, count]) => ({ label: ruleLabel(code), count }))
+      .sort((a, b) => b.count - a.count);
+    setBreakdownModal({ title: "유형(규칙)별 특이건 breakdown", rows });
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div
@@ -214,8 +317,36 @@ export default function AnomaliesView() {
         style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}
       >
         <div className="flex flex-wrap items-center gap-3">
-          {months.length > 1 && (
+          {years.length > 1 && (
+            <div
+              className="inline-flex p-1 rounded-lg gap-1"
+              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+            >
+              {(
+                [
+                  { value: "month", label: "월별" },
+                  { value: "year", label: "연도별" },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setPeriodMode(opt.value)}
+                  className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+                  style={{
+                    background: periodMode === opt.value ? "var(--accent)" : "transparent",
+                    color: periodMode === opt.value ? "#fff" : "var(--text-muted)",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {periodMode === "month" && months.length > 1 && (
             <PeriodSelect periods={months} periodKind="month" value={month} onChange={setMonth} label="조회 월" />
+          )}
+          {periodMode === "year" && years.length > 0 && (
+            <PeriodSelect periods={years} periodKind="year" value={year} onChange={setYear} label="조회 연도" />
           )}
           <OrgFilter
             division={division}
@@ -265,14 +396,69 @@ export default function AnomaliesView() {
             })
           ) ?? null
         }
+        onItemClick={handleTopPersonClick}
       />
 
       {trend && (
-        <MonthlyTrendChart
-          title={`${(month ?? "").slice(0, 4)}년 ${department ?? division ?? "전사"} 월별 특이건 추이`}
-          points={trend.map((t) => ({ label: `${Number(t.month.slice(5, 7))}월`, value: t.total }))}
-          emptyHint="이번 해에 업로드된 데이터가 아직 없습니다."
-        />
+        <div className="rounded-2xl p-5" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+            <div className="text-xs font-medium" style={{ color: "var(--text-faint)" }}>
+              {`${periodMode === "year" ? year ?? "" : (month ?? "").slice(0, 4)}년 ${department ?? division ?? "전사"} 월별 특이건 추이`}
+            </div>
+            <div
+              className="inline-flex p-1 rounded-lg gap-1"
+              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+            >
+              {(
+                [
+                  { value: "total", label: "전체 보기" },
+                  { value: "byRule", label: "유형별 보기" },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setTrendMode(opt.value)}
+                  className="px-3 py-1 rounded-md text-xs font-medium transition-colors"
+                  style={{
+                    background: trendMode === opt.value ? "var(--accent)" : "transparent",
+                    color: trendMode === opt.value ? "#fff" : "var(--text-muted)",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {trendMode === "total" ? (
+            <MonthlyTrendChart
+              title=""
+              bare
+              points={trend.map((t) => ({ label: `${Number(t.month.slice(5, 7))}월`, value: t.total, key: t.month }))}
+              emptyHint="이번 해에 업로드된 데이터가 아직 없습니다."
+              onPointClick={(p) => handleTrendPointClick(p.key ?? p.label)}
+            />
+          ) : data ? (
+            <DonutChart
+              slices={Object.entries(data.by_rule).map(([code, value], i) => ({
+                key: code,
+                label: ruleLabel(code),
+                value,
+                color: ruleColor(code, i),
+              }))}
+              centerLabel={`${data.month ?? "-"}${periodMode === "year" ? "년" : ""} 특이건`}
+              activeKey={activeRule}
+              onSelect={setActiveRule}
+              emptyHint="이 기간엔 특이건이 없습니다."
+            />
+          ) : (
+            <div className="flex items-center justify-center py-10">
+              <span
+                className="w-5 h-5 rounded-full block"
+                style={{ border: "2px solid var(--accent)", borderTopColor: "transparent", animation: "spin 0.8s linear infinite" }}
+              />
+            </div>
+          )}
+        </div>
       )}
 
       {error && (
@@ -297,16 +483,20 @@ export default function AnomaliesView() {
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatTile
-              label={`총 특이건 (${data.month ?? "-"})`}
+              label={`총 특이건 (${data.month ?? "-"}${periodMode === "year" ? "년" : ""})`}
               value={data.total.toLocaleString()}
               icon={ICONS.total}
               tone="critical"
+              emphasize
+              onClick={() => handleDeptBreakdown("총 특이건 · 부서별 breakdown", "count")}
             />
             <StatTile
               label="특이 인원(중복 제외)"
               value={data.affected_employees.toLocaleString()}
               icon={ICONS.people}
               tone="accent"
+              emphasize
+              onClick={() => handleDeptBreakdown("특이 인원 · 부서별 breakdown", "distinct-employee")}
             />
             <StatTile
               label="탐지 규칙 수"
@@ -322,6 +512,7 @@ export default function AnomaliesView() {
                   : "-"
               }
               icon={ICONS.top}
+              onClick={() => handleRuleBreakdown()}
             />
           </div>
 
@@ -349,8 +540,10 @@ export default function AnomaliesView() {
                 </button>
               )}
               <div className="text-xs shrink-0" style={{ color: "var(--text-faint)" }}>
-                {showAll || !hasMore
+                {!hasMore
                   ? `${filtered.length.toLocaleString()}건`
+                  : showAll
+                  ? `${(page - 1) * EXPANDED_PAGE_SIZE + 1}-${Math.min(page * EXPANDED_PAGE_SIZE, filtered.length)}건 · 전체 ${filtered.length.toLocaleString()}건`
                   : `상위 ${PAGE_SIZE}건 표시 중 · 전체 ${filtered.length.toLocaleString()}건`}
               </div>
             </div>
@@ -369,10 +562,13 @@ export default function AnomaliesView() {
               ))}
             </div>
 
-            <div className={showAll ? "overflow-x-auto max-h-[560px] overflow-y-auto" : "overflow-x-auto"}>
+            <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className={showAll ? "sticky top-0" : ""} style={{ background: "var(--surface)" }}>
+                <thead style={{ background: "var(--surface)" }}>
                   <tr style={{ color: "var(--text-faint)" }} className="text-xs">
+                    {periodMode === "year" && (
+                      <th className="text-left font-medium px-4 py-3 whitespace-nowrap">월</th>
+                    )}
                     <th className="text-left font-medium px-4 py-3 whitespace-nowrap">사번</th>
                     <th className="text-left font-medium px-4 py-3 whitespace-nowrap">부서명</th>
                     <th className="text-left font-medium px-4 py-3 whitespace-nowrap">성명</th>
@@ -393,6 +589,11 @@ export default function AnomaliesView() {
                       style={{ borderTop: "1px solid var(--border)", borderLeft: `3px solid ${sv.fg}` }}
                       className="hover:bg-[var(--bg-elevated)]"
                     >
+                      {periodMode === "year" && (
+                        <td className="px-4 py-3 whitespace-nowrap" style={{ color: "var(--text-muted)" }}>
+                          {item.month ? `${Number(item.month.slice(5, 7))}월` : "-"}
+                        </td>
+                      )}
                       <td className="px-4 py-3 tabular-nums" style={{ fontVariantNumeric: "tabular-nums" }}>
                         {item.사번}
                       </td>
@@ -426,7 +627,7 @@ export default function AnomaliesView() {
                         <CaseStatusToggle
                           empId={item.사번}
                           ruleCode={item.rule_code}
-                          month={data.month ?? month ?? ""}
+                          month={periodMode === "year" ? item.month ?? "" : data.month ?? month ?? ""}
                           status={item.status}
                           onChange={(next) => handleStatusChange(item, next)}
                         />
@@ -436,7 +637,7 @@ export default function AnomaliesView() {
                   })}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="text-center py-10 text-sm" style={{ color: "var(--text-faint)" }}>
+                      <td colSpan={periodMode === "year" ? 9 : 8} className="text-center py-10 text-sm" style={{ color: "var(--text-faint)" }}>
                         조건에 맞는 특이건이 없습니다.
                       </td>
                     </tr>
@@ -446,14 +647,42 @@ export default function AnomaliesView() {
             </div>
 
             {hasMore && (
-              <div className="p-4 text-center" style={{ borderTop: "1px solid var(--border)" }}>
+              <div className="p-4 flex items-center justify-center gap-3" style={{ borderTop: "1px solid var(--border)" }}>
+                {showAll && totalPages > 1 && (
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="text-sm font-medium px-3 py-2 rounded-lg disabled:opacity-40"
+                    style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
+                  >
+                    이전
+                  </button>
+                )}
                 <button
-                  onClick={() => setShowAll((v) => !v)}
+                  onClick={() => {
+                    setShowAll((v) => !v);
+                    setPage(1);
+                  }}
                   className="text-sm font-medium px-4 py-2 rounded-lg"
                   style={{ background: "var(--accent-soft)", color: "var(--accent-strong)" }}
                 >
-                  {showAll ? "상위 30건만 보기" : `전체 ${filtered.length.toLocaleString()}건 보기`}
+                  {showAll ? "상위 10건만 보기" : `전체 ${filtered.length.toLocaleString()}건 펼쳐보기`}
                 </button>
+                {showAll && totalPages > 1 && (
+                  <>
+                    <span className="text-xs" style={{ color: "var(--text-faint)" }}>
+                      {page} / {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages}
+                      className="text-sm font-medium px-3 py-2 rounded-lg disabled:opacity-40"
+                      style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
+                    >
+                      다음
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -461,6 +690,134 @@ export default function AnomaliesView() {
       )}
 
       {showRulesModal && <RulesMetaModal onClose={() => setShowRulesModal(false)} />}
+
+      {monthModal && (
+        <Modal onClose={() => setMonthModal(null)} maxWidth={880}>
+          <div className="p-6 flex flex-col gap-4" style={{ maxHeight: "80vh" }}>
+            <div className="flex items-center justify-between shrink-0">
+              <h3 className="text-base font-semibold">
+                {Number(monthModal.month.slice(5, 7))}월 특이건 상세
+              </h3>
+              <span className="text-xs" style={{ color: "var(--text-faint)" }}>
+                {monthModal.items ? `${monthModal.items.length.toLocaleString()}건` : "불러오는 중..."}
+              </span>
+            </div>
+            <AnomalyMiniTable items={monthModal.items} error={monthModal.error} />
+          </div>
+        </Modal>
+      )}
+
+      {personModal && (
+        <Modal onClose={() => setPersonModal(null)} maxWidth={880}>
+          <div className="p-6 flex flex-col gap-4" style={{ maxHeight: "80vh" }}>
+            <div className="shrink-0">
+              <h3 className="text-base font-semibold">
+                {personModal.person.성명}
+                <span className="ml-1.5 text-xs font-normal" style={{ color: "var(--text-faint)" }}>
+                  {personModal.person.직급} · {personModal.person.사업부} · {personModal.person.부서명}
+                </span>
+              </h3>
+              <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>
+                {topPeopleMonth ? `${Number(topPeopleMonth.slice(5, 7))}월 기준` : ""} 총{" "}
+                {personModal.person.total_occurrences.toLocaleString()}회 · {personModal.person.rule_count}개 규칙
+              </p>
+            </div>
+            <AnomalyMiniTable items={personModal.items} error={personModal.error} />
+          </div>
+        </Modal>
+      )}
+
+      {breakdownModal && (
+        <Modal onClose={() => setBreakdownModal(null)} maxWidth={520}>
+          <div className="p-6 flex flex-col gap-4" style={{ maxHeight: "80vh" }}>
+            <h3 className="text-base font-semibold shrink-0">{breakdownModal.title}</h3>
+            <div className="overflow-y-auto flex flex-col gap-1.5">
+              {breakdownModal.rows.length === 0 && (
+                <div className="text-sm py-6 text-center" style={{ color: "var(--text-faint)" }}>
+                  데이터가 없습니다.
+                </div>
+              )}
+              {breakdownModal.rows.map((r) => {
+                const max = breakdownModal.rows[0]?.count || 1;
+                return (
+                  <div key={r.label} className="flex items-center gap-3">
+                    <div className="text-sm w-32 shrink-0 truncate">{r.label}</div>
+                    <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--bg-elevated)" }}>
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${Math.max(4, (r.count / max) * 100)}%`, background: "var(--accent)" }}
+                      />
+                    </div>
+                    <div className="text-sm font-semibold tabular-nums w-12 text-right shrink-0" style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {r.count.toLocaleString()}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function AnomalyMiniTable({ items, error }: { items: AnomalyItem[] | null; error?: string }) {
+  if (error) {
+    return <div className="text-sm p-4 rounded-xl" style={{ color: "var(--danger)", background: "#dc262612" }}>{error}</div>;
+  }
+  if (!items) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <span
+          className="w-5 h-5 rounded-full block"
+          style={{ border: "2px solid var(--accent)", borderTopColor: "transparent", animation: "spin 0.8s linear infinite" }}
+        />
+      </div>
+    );
+  }
+  if (items.length === 0) {
+    return (
+      <div className="text-sm py-10 text-center" style={{ color: "var(--text-faint)" }}>
+        해당 조건에 특이건이 없습니다.
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-auto rounded-xl" style={{ border: "1px solid var(--border)" }}>
+      <table className="w-full text-sm">
+        <thead style={{ background: "var(--bg)" }}>
+          <tr style={{ color: "var(--text-faint)" }} className="text-xs">
+            <th className="text-left font-medium px-3 py-2 whitespace-nowrap">사번</th>
+            <th className="text-left font-medium px-3 py-2 whitespace-nowrap">부서명</th>
+            <th className="text-left font-medium px-3 py-2 whitespace-nowrap">성명</th>
+            <th className="text-left font-medium px-3 py-2 whitespace-nowrap">직급</th>
+            <th className="text-left font-medium px-3 py-2 whitespace-nowrap">특이사례 케이스</th>
+            <th className="text-right font-medium px-3 py-2 whitespace-nowrap">발생</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, i) => (
+            <tr key={`${item.사번}-${item.rule_code}-${i}`} style={{ borderTop: "1px solid var(--border)" }}>
+              <td className="px-3 py-2 tabular-nums" style={{ fontVariantNumeric: "tabular-nums" }}>{item.사번}</td>
+              <td className="px-3 py-2" style={{ color: "var(--text-muted)" }}>{item.부서명}</td>
+              <td className="px-3 py-2">{item.성명}</td>
+              <td className="px-3 py-2" style={{ color: "var(--text-muted)" }}>{item.직급}</td>
+              <td className="px-3 py-2">
+                <span
+                  className="inline-block px-2 py-1 rounded-md text-xs font-medium"
+                  style={{ background: "var(--accent-soft)", color: "var(--accent-strong)" }}
+                >
+                  {ruleLabel(item.rule_code)}
+                </span>
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums" style={{ fontVariantNumeric: "tabular-nums" }}>
+                {item.occurrence_count.toLocaleString()}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -17,12 +17,15 @@ export default function TopPeopleBanner({
   icon,
   items,
   tone = "accent",
+  onItemClick,
 }: {
   heading: string;
   subheading?: string;
   icon: React.ReactNode;
   items: BannerItem[] | null;
   tone?: "accent" | "critical";
+  /** 현재 보여지는 인물을 클릭했을 때(예: 상세 히스토리 모달을 열 때) 순위(index)를 넘겨준다. */
+  onItemClick?: (index: number) => void;
 }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -45,11 +48,16 @@ export default function TopPeopleBanner({
   }
 
   const current = items[index];
+  const isTop = index === 0;
 
   return (
     <div
-      className="rounded-2xl p-4 flex items-center gap-4"
-      style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}
+      className="rounded-2xl p-4 flex items-center gap-4 transition-colors"
+      style={{
+        background: "var(--surface)",
+        border: isTop ? "1px solid var(--status-warning)" : "1px solid var(--border)",
+        boxShadow: isTop ? "0 0 0 3px var(--status-warning-soft)" : "var(--shadow-sm)",
+      }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -73,10 +81,18 @@ export default function TopPeopleBanner({
 
       <div className="w-px self-stretch shrink-0" style={{ background: "var(--border)" }} />
 
-      <div className="flex-1 min-w-0 flex items-center gap-3">
+      <div
+        className="flex-1 min-w-0 flex items-center gap-3"
+        onClick={onItemClick ? () => onItemClick(index) : undefined}
+        style={{ cursor: onItemClick ? "pointer" : "default" }}
+      >
         <div
           className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
-          style={{ background: toneSoft, color: toneColor }}
+          style={
+            isTop
+              ? { background: "var(--status-warning-soft)", color: "var(--status-warning)" }
+              : { background: toneSoft, color: toneColor }
+          }
         >
           {index + 1}
         </div>
@@ -89,7 +105,10 @@ export default function TopPeopleBanner({
           </div>
         </div>
         <div className="text-right shrink-0">
-          <div className="text-sm font-bold tabular-nums" style={{ color: toneColor, fontVariantNumeric: "tabular-nums" }}>
+          <div
+            className="text-sm font-bold tabular-nums"
+            style={{ color: isTop ? "var(--status-warning)" : toneColor, fontVariantNumeric: "tabular-nums" }}
+          >
             {current.metricLabel}
           </div>
           {current.metricSub && (

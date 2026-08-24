@@ -13,6 +13,13 @@ from .sheet_utils import find_key_column
 
 DIVISION_COL = "사업부"
 
+# RAW 시트 자체에 사업부명 컬럼이 포함된 경우(=조직도 파일 없이도 바로 사업부를 알 수 있는 경우) 탐지용 후보 헤더명.
+RAW_DIVISION_HEADER_CANDIDATES = ["사업부명", DIVISION_COL, "사업부문", "사업본부", "본부"]
+
+
+def find_raw_division_column(columns: "list[str]") -> "str | None":
+    return find_key_column(list(columns), RAW_DIVISION_HEADER_CANDIDATES)
+
 
 def load_division_map(path: str) -> "dict[str, str]":
     """조직도 시트를 {부서명: 사업부} dict로 변환.
@@ -38,9 +45,17 @@ def load_division_map(path: str) -> "dict[str, str]":
 
 
 def attach_division(df: pd.DataFrame, division_map: "dict[str, str] | None") -> pd.DataFrame:
-    """df에 사업부 컬럼을 붙인다. 매핑이 없으면 부서명을 그대로 사업부로 대체(임시)."""
+    """df에 사업부 컬럼을 붙인다.
+
+    우선순위: (1) RAW 시트에 사업부명 컬럼이 이미 있으면 그대로 사용 (2) 업로드된 조직도
+    매핑이 있으면 부서명 -> 사업부로 변환 (3) 둘 다 없으면 부서명을 그대로 사업부로 대체(임시).
+    """
     d = df.copy()
-    if division_map:
+    raw_div_col = find_raw_division_column(d.columns)
+    if raw_div_col is not None:
+        values = d[raw_div_col].astype(str).str.strip()
+        d[DIVISION_COL] = values.where(values.ne("") & values.ne("nan"), d[C.COL_DEPT])
+    elif division_map:
         d[DIVISION_COL] = d[C.COL_DEPT].map(division_map).fillna("(미매핑)")
     else:
         d[DIVISION_COL] = d[C.COL_DEPT]

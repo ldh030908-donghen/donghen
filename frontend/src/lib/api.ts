@@ -41,6 +41,8 @@ export type AnomalyItem = {
   occurrence_count: number;
   status?: CaseStatus | "";
   note?: string;
+  /** 연도별(1~12월 통합) 조회일 때만 채워지는, 이 건이 실제로 발생한 월. */
+  month?: string;
 };
 
 export type AnomaliesResponse = {
@@ -106,12 +108,15 @@ export async function fetchMonths(): Promise<string[]> {
 
 export async function fetchAnomalies(params: {
   month?: string;
+  /** month를 안 주고 year만 주면 그 해 1~12월 데이터를 통합해서 반환한다. */
+  year?: string;
   division?: string;
   department?: string;
   empId?: string;
 }): Promise<AnomaliesResponse> {
   const qs = new URLSearchParams();
   if (params.month) qs.set("month", params.month);
+  if (params.year) qs.set("year", params.year);
   if (params.division) qs.set("division", params.division);
   if (params.department) qs.set("department", params.department);
   if (params.empId) qs.set("emp_id", params.empId);

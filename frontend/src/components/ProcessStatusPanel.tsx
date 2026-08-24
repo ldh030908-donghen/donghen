@@ -48,8 +48,11 @@ export default function ProcessStatusPanel({
 
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1">
         {!hasStarted && !loading && (
-          <div className="text-[11px] leading-relaxed" style={{ color: "var(--text-faint)" }}>
-            어시스턴트에게 질문하면 어떤 데이터를 조회했는지 여기 단계별로 표시됩니다.
+          <div className="flex-1 flex flex-col items-center justify-center text-center gap-1.5 py-2">
+            <span style={{ color: "var(--accent)", opacity: 0.5 }}>{FLOW_ICON}</span>
+            <div className="text-[11px] leading-relaxed max-w-[180px]" style={{ color: "var(--text-faint)" }}>
+              어시스턴트에게 질문하면 조회 단계가 여기 순서대로 표시돼요
+            </div>
           </div>
         )}
 

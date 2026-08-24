@@ -10,11 +10,16 @@ from . import columns as C
 from .compute import compute_stay_minutes, parse_hhmm_to_minutes
 from .sheet_utils import find_key_column, find_numeric_column_by_keywords
 
-_TIMEDELTA_STR_RE = re.compile(r"^(\d+) days? (\d+):(\d+):(\d+)$|^(\d+):(\d+):(\d+)$")
+_TIMEDELTA_STR_RE = re.compile(
+    r"^(\d+) days? (\d+):(\d+):(\d+)(?:\.\d+)?$|^(\d+):(\d+):(\d+)(?:\.\d+)?$"
+)
 
 
 def parse_timedelta_str_to_minutes(value: object) -> float:
-    """pandas가 dtype=str로 읽은 timedelta 컬럼('H:MM:SS' 또는 'N days H:MM:SS')을 분으로 변환."""
+    """pandas가 dtype=str로 읽은 timedelta 컬럼('H:MM:SS[.ffffff]' 또는 'N days H:MM:SS[.ffffff]')을
+    분으로 변환. 실근로시간처럼 시각 뺄셈으로 계산된 값은 마이크로초 잔차가 붙어
+    'H:MM:SS.ffffff' 형태로 오는 경우가 대부분이라, 초 뒤 소수부는 있어도 없어도 매치되게 한다.
+    """
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return 0.0
     s = str(value).strip()
