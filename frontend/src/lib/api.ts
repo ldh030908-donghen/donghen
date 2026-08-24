@@ -1,8 +1,7 @@
-// 사내망 등 다른 기기에서 접속해도 지금 브라우저 주소의 호스트를 그대로 따라가서
-// API를 찾도록 한다 (localhost로 고정하면 다른 PC에서 열었을 때 자기 자신을 가리키게 됨).
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ??
-  (typeof window !== "undefined" ? `http://${window.location.hostname}:8000` : "http://localhost:8000");
+// 프론트 서버(next.config.ts의 rewrites)가 /api/*를 백엔드(:8000)로 대신 전달해주므로,
+// 브라우저는 항상 "지금 접속한 주소"로만 요청하면 된다 (localhost/사내망 IP/Cloudflare 터널
+// 주소 어디로 접속하든 동일하게 동작 — 접속 주소별로 다른 백엔드 주소를 계산할 필요가 없음).
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
 export type UploadResponse = {
   row_count: number;
