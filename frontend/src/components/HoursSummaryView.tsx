@@ -142,15 +142,19 @@ export default function HoursSummaryView() {
   // 사용자가 "전체 기간"을 선택해둔 상태라면(연도별/월별 전체 비교) 기간 단위를 바꿔도 그 선택을 유지한다.
   useEffect(() => {
     let cancelled = false;
-    fetchPeriods(periodKind).then((periods) => {
-      if (cancelled) return;
-      setPeriodOptions(periods);
-      setPeriodValue((prev) => {
-        if (prev === PERIOD_ALL) return prev;
-        if (prev && periods.includes(prev)) return prev;
-        return periods[periods.length - 1] ?? null;
+    fetchPeriods(periodKind)
+      .then((periods) => {
+        if (cancelled) return;
+        setPeriodOptions(periods);
+        setPeriodValue((prev) => {
+          if (prev === PERIOD_ALL) return prev;
+          if (prev && periods.includes(prev)) return prev;
+          return periods[periods.length - 1] ?? null;
+        });
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "조회 시점 목록을 불러오지 못했습니다.");
       });
-    });
     return () => {
       cancelled = true;
     };
@@ -158,13 +162,22 @@ export default function HoursSummaryView() {
 
   // 전사 월별 추이 그래프도 지금 선택된 사업부/부서/근무제 범위(하위 트리)로 좁혀서 보여준다.
   useEffect(() => {
-    fetchMonths().then((months) => {
-      const year = months[months.length - 1]?.slice(0, 4);
-      if (!year) return;
-      fetchHoursTrend({ year, metric, division: effectiveDivision, department: effectiveDepartment, workGroup: workGroup ?? undefined }).then(
-        setTrend
-      );
-    });
+    let cancelled = false;
+    fetchMonths()
+      .then((months) => {
+        const year = months[months.length - 1]?.slice(0, 4);
+        if (!year || cancelled) return null;
+        return fetchHoursTrend({ year, metric, division: effectiveDivision, department: effectiveDepartment, workGroup: workGroup ?? undefined });
+      })
+      .then((res) => {
+        if (!cancelled && res) setTrend(res);
+      })
+      .catch(() => {
+        if (!cancelled) setTrend(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [metric, effectiveDivision, effectiveDepartment, workGroup]);
 
   // 가장 최근 데이터 기준 근무시간 과다자 상위 5명 — 사업부/부서/근무제 필터를 선택하면 그 범위로 좁혀진다.
