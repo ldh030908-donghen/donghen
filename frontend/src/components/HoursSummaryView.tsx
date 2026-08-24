@@ -21,6 +21,7 @@ import MonthlyTrendChart from "./MonthlyTrendChart";
 import PeriodSelect, { PERIOD_ALL, periodFullLabel } from "./PeriodSelect";
 import TopPeopleBanner, { type BannerItem } from "./TopPeopleBanner";
 import WorkGroupSelect from "./WorkGroupSelect";
+import { formatHoursMinutes } from "@/lib/hours";
 
 const CLOCK_ICON = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -238,8 +239,8 @@ export default function HoursSummaryView() {
               dept: p.부서명,
               division: p.사업부,
               rankTitle: p.직급,
-              metricLabel: `${p.avg_hours_per_employee_per_month.toFixed(2)}h`,
-              metricSub: `누적 ${p.total_hours.toFixed(2)}h`,
+              metricLabel: formatHoursMinutes(p.avg_hours_per_employee_per_month),
+              metricSub: `누적 ${formatHoursMinutes(p.total_hours)}`,
             })
           ) ?? null
         }
@@ -252,7 +253,7 @@ export default function HoursSummaryView() {
             label: `${Number(t.month.slice(5, 7))}월`,
             value: t.avg_hours_per_employee_per_month,
           }))}
-          valueFormatter={(v) => `${v.toFixed(2)}h`}
+          valueFormatter={formatHoursMinutes}
           emptyHint="이번 해에 업로드된 데이터가 아직 없습니다."
         />
       )}
@@ -389,13 +390,13 @@ export default function HoursSummaryView() {
                       {row.employee_count.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium" style={{ fontVariantNumeric: "tabular-nums" }}>
-                      {row.avg_hours_per_employee_per_month.toFixed(2)}h
+                      {formatHoursMinutes(row.avg_hours_per_employee_per_month)}
                     </td>
                     <td
                       className="px-4 py-3 text-right tabular-nums"
                       style={{ fontVariantNumeric: "tabular-nums", color: "var(--text-muted)" }}
                     >
-                      {row.total_hours.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}h
+                      {formatHoursMinutes(row.total_hours)}
                     </td>
                   </tr>
                 ))}

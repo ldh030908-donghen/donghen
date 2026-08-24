@@ -14,6 +14,7 @@ import EmployeePicker from "./EmployeePicker";
 import MonthlyTrendChart from "./MonthlyTrendChart";
 import OrgFilter from "./OrgFilter";
 import { ruleLabel } from "./RuleCountChart";
+import { formatHoursMinutes } from "@/lib/hours";
 
 const SOURCE_STYLE: Record<EmployeeTimelineItem["source"], { bg: string; fg: string; label: string }> = {
   rule: { bg: "var(--status-critical-soft)", fg: "var(--status-critical)", label: "정식규칙" },
@@ -148,7 +149,7 @@ export default function EmployeeTimelineView() {
           <MonthlyTrendChart
             title="월별 실근로시간 추이"
             points={data.hours_trend.map((t) => ({ label: `${Number(t.month.slice(5, 7))}월`, value: t.hours }))}
-            valueFormatter={(v) => `${v.toFixed(2)}h`}
+            valueFormatter={formatHoursMinutes}
             emptyHint="근무시간 데이터가 없습니다."
           />
 
