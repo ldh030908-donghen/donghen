@@ -167,7 +167,14 @@ export default function HoursSummaryView() {
       .then((months) => {
         const year = months[months.length - 1]?.slice(0, 4);
         if (!year || cancelled) return null;
-        return fetchHoursTrend({ year, metric, division: effectiveDivision, department: effectiveDepartment, workGroup: workGroup ?? undefined });
+        return fetchHoursTrend({
+          year,
+          metric,
+          division: effectiveDivision,
+          department: effectiveDepartment,
+          workGroup: workGroup ?? undefined,
+          empId: employee?.사번,
+        });
       })
       .then((res) => {
         if (!cancelled && res) setTrend(res);
@@ -178,7 +185,7 @@ export default function HoursSummaryView() {
     return () => {
       cancelled = true;
     };
-  }, [metric, effectiveDivision, effectiveDepartment, workGroup]);
+  }, [metric, effectiveDivision, effectiveDepartment, workGroup, employee?.사번]);
 
   // 가장 최근 데이터 기준 근무시간 과다자 상위 5명 — 사업부/부서/근무제 필터를 선택하면 그 범위로 좁혀진다.
   useEffect(() => {
@@ -261,7 +268,7 @@ export default function HoursSummaryView() {
 
       {trend && (
         <MonthlyTrendChart
-          title={`${trend[0]?.month.slice(0, 4) ?? ""}년 ${effectiveDepartment ?? effectiveDivision ?? "전사"} 월별 1인당 평균 ${metric === "worktime" ? "실근로시간" : "체류시간"} 추이`}
+          title={`${trend[0]?.month.slice(0, 4) ?? ""}년 ${employee ? `${employee.성명} 개인` : effectiveDepartment ?? effectiveDivision ?? "전사"} 월별 ${employee ? "" : "1인당 평균 "}${metric === "worktime" ? "실근로시간" : "체류시간"} 추이`}
           points={trend.map((t) => ({
             label: `${Number(t.month.slice(5, 7))}월`,
             value: t.avg_hours_per_employee_per_month,

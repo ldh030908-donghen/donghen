@@ -206,12 +206,14 @@ export async function fetchHoursTrend(params: {
   division?: string;
   department?: string;
   workGroup?: string;
+  empId?: string;
 }): Promise<HoursTrendItem[]> {
   const qs = new URLSearchParams({ metric: params.metric ?? "worktime" });
   if (params.year) qs.set("year", params.year);
   if (params.division) qs.set("division", params.division);
   if (params.department) qs.set("department", params.department);
   if (params.workGroup) qs.set("work_group", params.workGroup);
+  if (params.empId) qs.set("emp_id", params.empId);
   const res = await request<{ items: HoursTrendItem[] }>(`/api/hours-trend?${qs.toString()}`);
   return res.items;
 }

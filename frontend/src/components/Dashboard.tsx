@@ -47,29 +47,18 @@ export default function Dashboard({
 
   return (
     <div className="w-full max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <SideNavToggle onClick={onOpenNav} />
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: "linear-gradient(135deg, var(--accent) 0%, #4a89f5 100%)", boxShadow: "var(--shadow-glow)" }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-              <path d="M3 3v18h18M8 17V9m5 8V5m5 12v-6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-2xl md:text-[32px] font-bold tracking-tight leading-tight">근태 분석 대시보드</h1>
-          </div>
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <SideNavToggle onClick={onOpenNav} />
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: "linear-gradient(135deg, var(--accent) 0%, #4a89f5 100%)", boxShadow: "var(--shadow-glow)" }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+            <path d="M3 3v18h18M8 17V9m5 8V5m5 12v-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowUpload(true)}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition-transform hover:-translate-y-px"
-            style={{ background: "var(--accent)", color: "#fff", boxShadow: "var(--shadow-glow)" }}
-          >
-            + 월별 데이터 업로드
-          </button>
+        <div>
+          <h1 className="text-2xl md:text-[32px] font-bold tracking-tight leading-tight">근태 분석 대시보드</h1>
         </div>
       </div>
 

@@ -481,8 +481,10 @@ def get_hours_trend(
     division: Optional[str] = None,
     department: Optional[str] = None,
     work_group: Optional[str] = None,
+    emp_id: Optional[str] = None,
 ):
-    """월별 근무시간 추이. division/department/work_group을 주면 그 범위(하위 트리)로만 집계한다."""
+    """월별 근무시간 추이. division/department/work_group을 주면 그 범위(하위 트리)로만 집계하고,
+    emp_id를 주면 그 인원 개인의 추이만 집계한다(개인별 근무시간 현황 그래프용)."""
     df = db.load_all_records()
     if df.empty:
         return {"items": []}
@@ -494,12 +496,18 @@ def get_hours_trend(
     items = []
     for m in months:
         r = query_avg_hours(
-            df, period_kind="month", period_value=m, division=division, department=department, metric=metric
+            df,
+            period_kind="month",
+            period_value=m,
+            division=division,
+            department=department,
+            employee_id=emp_id,
+            metric=metric,
         )
         items.append(
             {
                 "month": m,
-                "avg_hours_per_employee_per_month": r["avg_hours_per_employee_per_month"],
+                "avg_hours_per_employee_per_month": r["avg_hours_per_employee_per_month"] or 0,
                 "employee_count": r["employee_count"],
             }
         )
