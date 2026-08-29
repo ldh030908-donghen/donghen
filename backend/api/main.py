@@ -309,6 +309,62 @@ def reset_data():
     return {"status": "reset"}
 
 
+def _ingest_xlsx_bytes(content: bytes, filename: str) -> pd.DataFrame:
+    """xlsx 바이트를 파싱해 DB에 upsert하고, 파싱 결과(df)를 반환한다.
+
+    업로드 API와 데모 데이터 자동 시드가 이 로직을 공유한다.
+    """
+    parsed = load_raw(io.BytesIO(content))
+    division_map = db.load_division_map_from_db() or None
+    parsed = attach_division(parsed, division_map)
+    db.upsert_daily_records(parsed)
+    db.log_upload(filename, parsed)
+    return parsed
+
+
+# Render 무료 플랜은 영속 디스크가 없어 백엔드가 재배포/재시작될 때마다 SQLite 파일이 초기화된다.
+# 시연회 도중 데이터가 또 사라지는 걸 막기 위해, 서버 기동 시 DB가 비어 있으면 저장소에 커밋된
+# 데모용 더미 데이터(전 규칙 R1~R7 커버, 개인정보 아님)를 자동으로 채워 넣는다.
+_DEMO_SEED_PATH = os.path.join(os.path.dirname(__file__), "..", "demo_dummy.xlsx")
+
+
+@app.on_event("startup")
+def _seed_demo_data_if_empty() -> None:
+    if db.has_any_data():
+        return
+    if not os.path.exists(_DEMO_SEED_PATH):
+        logger.info("데모 시드 파일 없음, 건너뜀: %s", _DEMO_SEED_PATH)
+        return
+    try:
+        with open(_DEMO_SEED_PATH, "rb") as f:
+            content = f.read()
+        parsed = _ingest_xlsx_bytes(content, "demo_dummy.xlsx")
+        logger.info("데모 데이터 자동 시드 완료: %d행 / %d명", len(parsed), parsed[C.COL_EMP_ID].nunique())
+    except Exception:  # noqa: BLE001
+        logger.exception("데모 데이터 자동 시드 실패")
+
+
+@app.on_event("startup")
+def _warm_caches() -> None:
+    """규칙 7종/확인대상 계산은 달마다 첫 조회 때만 무겁고 그 뒤론 캐시로 빠르다(위 캐시 주석 참고).
+    시연 중 첫 클릭에서 그 비용을 물지 않도록, 서버가 요청을 받기 시작하기 전에 보유한 모든 달을
+    미리 한 번씩 계산해 캐시를 데워둔다. (개인별 히스토리 화면이 보유 월 전체를 훑는 탓에 특히
+    이 사전 계산 없이는 첫 조회가 아주 오래 걸린다.)"""
+    df = db.load_all_records()
+    if df.empty:
+        return
+    months = _available_months(df)
+    logger.info("캐시 예열 시작: %d개월", len(months))
+    for m in months:
+        try:
+            _compute_month_anomalies(m)
+            _compute_month_candidates(m)
+        except Exception:  # noqa: BLE001
+            logger.exception("캐시 예열 실패: month=%s", m)
+    _employee_month_hours(df)
+    logger.info("캐시 예열 완료")
+
+
 @app.post("/api/upload", response_model=UploadResponse)
 async def upload_raw(file: UploadFile = File(...)):
     content = await file.read()
@@ -321,18 +377,12 @@ async def upload_raw(file: UploadFile = File(...)):
     )
     try:
         # 원본 바이트는 이 함수 안에서만 살아있고, 파싱 후 파생 데이터만 남긴다. 디스크에 저장하지 않는다.
-        parsed = load_raw(io.BytesIO(content))
+        parsed = _ingest_xlsx_bytes(content, file.filename or "unknown.xlsx")
     except Exception as exc:  # noqa: BLE001
         logger.exception("업로드 파싱 실패: filename=%r", file.filename)
         raise HTTPException(status_code=400, detail=f"파일을 읽는 중 오류: {exc}") from exc
     finally:
         del content
-
-    division_map = db.load_division_map_from_db() or None
-    parsed = attach_division(parsed, division_map)
-
-    db.upsert_daily_records(parsed)
-    db.log_upload(file.filename or "unknown.xlsx", parsed)
 
     row_count = len(parsed)
     employee_count = int(parsed[C.COL_EMP_ID].nunique())
@@ -549,6 +599,107 @@ def get_anomalies_top_people(
     return {"month": target_month, "items": agg.to_dict(orient="records")}
 
 
+# 인당 월별 평균근로시간(employee x month) 집계 캐시. /api/roster가 매 요청마다 21만행 전체를
+# groupby하면 (동시 요청 시 GIL 경합으로) 수 초~수십 초씩 걸려 홈 화면이 멈춘 것처럼 보인다
+# (예전에 규칙 계산 캐시가 없었을 때 겪은 것과 같은 문제) — 위 _anomalies_cache와 같은 방식으로
+# data_version이 바뀔 때만 다시 계산한다.
+_employee_hours_cache: "pd.DataFrame | None" = None
+_employee_hours_cache_version: "int | None" = None
+
+
+def _employee_month_hours(df: pd.DataFrame) -> pd.DataFrame:
+    global _employee_hours_cache, _employee_hours_cache_version
+    version = db.data_version()
+    if _employee_hours_cache is None or version != _employee_hours_cache_version:
+        _employee_hours_cache = summarize_worktime(df, group_level="employee", period_kind="month", metric="worktime")
+        _employee_hours_cache_version = version
+    return _employee_hours_cache
+
+
+@app.get("/api/roster")
+def get_roster(
+    month: Optional[str] = None,
+    division: Optional[str] = None,
+    department: Optional[str] = None,
+):
+    """홈(전체 현황) 화면의 전체 인원 명단용: 그 달 근무기록이 있는 전 인원을 기준으로,
+    특이건(0건 포함)/확인대상/평균근로시간을 한 사람당 한 행으로 합쳐서 내려준다."""
+    df = db.load_all_records()
+    if df.empty:
+        return {"month": None, "items": []}
+
+    months = _available_months(df)
+    target_month = month or months[-1]
+    month_df = _load_filtered(target_month)
+    if division:
+        month_df = month_df[month_df[DIVISION_COL] == division]
+    if department:
+        month_df = month_df[month_df[C.COL_DEPT] == department]
+    if month_df.empty:
+        return {"month": target_month, "items": []}
+
+    profile_cols = [C.COL_EMP_ID, DIVISION_COL, C.COL_DEPT, C.COL_NAME, C.COL_RANK]
+    roster = (
+        month_df.sort_values(C.COL_DATE)
+        .drop_duplicates(C.COL_EMP_ID, keep="last")[profile_cols]
+        .set_index(C.COL_EMP_ID)
+        .fillna("")
+    )
+
+    hours = _employee_month_hours(df)
+    hours = hours[hours["period"] == target_month].set_index(C.COL_EMP_ID)
+    roster["avg_hours"] = hours["avg_hours_per_employee_per_month"].reindex(roster.index).fillna(0.0)
+
+    anomalies = _attach_case_status(_compute_month_anomalies(target_month), target_month)
+    anomalies = anomalies[anomalies[C.COL_EMP_ID].isin(roster.index)]
+
+    anomaly_total = anomalies.groupby(C.COL_EMP_ID)["occurrence_count"].sum()
+    roster["anomaly_total"] = anomaly_total.reindex(roster.index).fillna(0).astype(int)
+
+    by_rule = anomalies.groupby([C.COL_EMP_ID, "rule_code"])["occurrence_count"].sum()
+    anomaly_by_rule: "dict[str, dict[str, int]]" = {}
+    top_rule: "dict[str, str]" = {}
+    for emp_id, sub in by_rule.groupby(level=0):
+        counts = sub.droplevel(0).to_dict()
+        anomaly_by_rule[emp_id] = counts
+        top_rule[emp_id] = max(counts, key=counts.get)
+
+    status_counts = (
+        anomalies.assign(status=anomalies["status"].replace("", "unconfirmed"))
+        .groupby([C.COL_EMP_ID, "status"])
+        .size()
+    )
+    status_summary: "dict[str, dict[str, int]]" = {}
+    for emp_id, sub in status_counts.groupby(level=0):
+        status_summary[emp_id] = sub.droplevel(0).to_dict()
+
+    candidates_df = _compute_month_candidates(target_month)
+    candidates_df = candidates_df[candidates_df[C.COL_EMP_ID].isin(roster.index)]
+    candidate_total = candidates_df.groupby(C.COL_EMP_ID).size()
+    roster["candidate_total"] = candidate_total.reindex(roster.index).fillna(0).astype(int)
+
+    items = []
+    for _, row in roster.reset_index().iterrows():
+        eid = row[C.COL_EMP_ID]
+        items.append(
+            {
+                C.COL_EMP_ID: eid,
+                DIVISION_COL: row[DIVISION_COL],
+                C.COL_DEPT: row[C.COL_DEPT],
+                C.COL_NAME: row[C.COL_NAME],
+                C.COL_RANK: row[C.COL_RANK],
+                "avg_hours": float(row["avg_hours"]),
+                "anomaly_total": int(row["anomaly_total"]),
+                "anomaly_by_rule": anomaly_by_rule.get(eid, {}),
+                "top_rule": top_rule.get(eid),
+                "candidate_total": int(row["candidate_total"]),
+                "status_summary": status_summary.get(eid, {}),
+            }
+        )
+
+    return {"month": target_month, "items": items}
+
+
 @app.get("/api/hours-summary/top-people")
 def get_hours_summary_top_people(
     period_kind: str = "month",
@@ -574,10 +725,15 @@ def get_hours_summary_top_people(
     if not target_period and period_kind == "month":
         target_period = _available_months(df)[-1] if not df.empty else None
 
-    try:
-        result = summarize_worktime(df, group_level="employee", period_kind=period_kind, metric=metric)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # 필터 없이 월 단위/실근로시간(가장 흔한 홈 화면 TOP5 조회 패턴)이면 캐시된 집계를 재사용해
+    # 21만행 groupby를 매 요청마다 다시 돌리지 않는다.
+    if not division and not department and not work_group and period_kind == "month" and metric == "worktime":
+        result = _employee_month_hours(df)
+    else:
+        try:
+            result = summarize_worktime(df, group_level="employee", period_kind=period_kind, metric=metric)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if target_period:
         result = result[result["period"] == target_period]
     result = result.sort_values("avg_hours_per_employee_per_month", ascending=False).head(limit)

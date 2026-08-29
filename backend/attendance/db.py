@@ -168,6 +168,14 @@ def load_all_records() -> pd.DataFrame:
         if not df.empty:
             df["is_hq_flex"] = df["is_hq_flex"].astype(bool)
             df["is_field_flex"] = df["is_field_flex"].astype(bool)
+            # period_* 컬럼(주/월/분기/반기/연 라벨)을 여기서 한 번만 계산해둔다.
+            # add_period_columns()는 날짜 파싱 + isocalendar() 때문에 21만행 기준 호출마다
+            # 꽤 걸리는데, 이걸 호출부(hours_summary 등)마다 매번 다시 돌리면(예: 개인별 히스토리가
+            # 달마다 한 번씩 부르는 식) 요청 하나가 수십 초씩 걸릴 수 있다. 여기서 미리 붙여두면
+            # add_period_columns()가 이미 있는 컬럼을 보고 그대로 재사용한다.
+            from .periods import add_period_columns  # 지연 import: 순환 참조 방지
+
+            df = add_period_columns(df)
         _cache["df"] = df
         _cache["df_version"] = _cache["version"]
     return _cache["df"]  # 호출부에서 in-place로 컬럼을 새로 대입할 경우 반드시 .copy() 후 사용할 것

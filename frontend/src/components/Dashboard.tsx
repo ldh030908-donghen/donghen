@@ -7,17 +7,19 @@ import AnomaliesView from "./AnomaliesView";
 import CandidatesView from "./CandidatesView";
 import EmployeeTimelineView from "./EmployeeTimelineView";
 import HoursSummaryView from "./HoursSummaryView";
+import OverviewView from "./OverviewView";
 import EmptyState from "./EmptyState";
 import Modal from "./Modal";
 import UploadFlow from "./UploadFlow";
 import { SideNavToggle } from "./SideNav";
 
-export type Tab = "anomalies" | "hours" | "candidates" | "timeline" | "settings";
+export type Tab = "home" | "anomalies" | "hours" | "candidates" | "timeline" | "settings";
 
 export default function Dashboard({
   overview,
   onDataChanged,
   tab,
+  onSelectTab,
   showUpload,
   onShowUploadChange,
   onOpenNav,
@@ -25,13 +27,20 @@ export default function Dashboard({
   overview: Overview;
   onDataChanged: () => void;
   tab: Tab;
+  onSelectTab: (t: Tab) => void;
   showUpload: boolean;
   onShowUploadChange: (v: boolean) => void;
   onOpenNav: () => void;
 }) {
   const [resetting, setResetting] = useState(false);
+  const [ruleFilter, setRuleFilter] = useState<{ rule: string; token: number } | null>(null);
   const hasData = overview.has_data;
   const setShowUpload = onShowUploadChange;
+
+  function handleNavigateToRule(ruleCode: string) {
+    setRuleFilter((prev) => ({ rule: ruleCode, token: (prev?.token ?? 0) + 1 }));
+    onSelectTab("anomalies");
+  }
 
   async function handleReset() {
     if (!window.confirm("업로드된 근태 데이터를 전부 삭제할까요? 되돌릴 수 없습니다.")) return;
@@ -81,7 +90,10 @@ export default function Dashboard({
 
       {hasData ? (
         <>
-          {tab === "anomalies" && <AnomaliesView />}
+          {tab === "home" && (
+            <OverviewView totalEmployeeCount={overview.total_employee_count} onNavigateToRule={handleNavigateToRule} />
+          )}
+          {tab === "anomalies" && <AnomaliesView key={ruleFilter?.token ?? 0} initialRuleFilter={ruleFilter?.rule ?? null} />}
           {tab === "hours" && <HoursSummaryView />}
           {tab === "candidates" && <CandidatesView />}
           {tab === "timeline" && <EmployeeTimelineView />}
@@ -120,6 +132,15 @@ export default function Dashboard({
 }
 
 const TAB_META: Record<Tab, { label: string; description: string; icon: React.ReactNode }> = {
+  home: {
+    label: "전체 현황",
+    description: "전사 KPI, 시각화, 전체 인원 명단을 한 화면에서 확인합니다.",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 11.5 12 4l9 7.5M5 10v10h5v-6h4v6h5V10" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
   anomalies: {
     label: "근태 특이건 조회",
     description: "출입문 로그 기반 근태 이상 패턴을 사업부 → 부서 → 개인 단위로 조회합니다.",

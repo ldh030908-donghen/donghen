@@ -32,6 +32,8 @@ server.log
 
 # Large sample/dummy data
 *.xlsx
+# 단, 시연용 데모 시드 데이터는 예외 (실제 인사데이터 아님, 서버 재배포 시 자동 시드용으로 커밋 필요)
+!backend/demo_dummy.xlsx
 
 # Analysis output
 backend/output/

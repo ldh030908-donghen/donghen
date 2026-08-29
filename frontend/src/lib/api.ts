@@ -393,3 +393,29 @@ export type EmployeeTimeline = {
 export async function fetchEmployeeTimeline(empId: string): Promise<EmployeeTimeline> {
   return request<EmployeeTimeline>(`/api/employee-timeline?emp_id=${encodeURIComponent(empId)}`);
 }
+
+export type RosterItem = {
+  사번: string;
+  사업부: string;
+  부서명: string;
+  성명: string;
+  직급: string;
+  avg_hours: number;
+  anomaly_total: number;
+  anomaly_by_rule: Record<string, number>;
+  top_rule: string | null;
+  candidate_total: number;
+  status_summary: Record<string, number>;
+};
+
+export async function fetchRoster(params: {
+  month?: string;
+  division?: string;
+  department?: string;
+}): Promise<{ month: string | null; items: RosterItem[] }> {
+  const qs = new URLSearchParams();
+  if (params.month) qs.set("month", params.month);
+  if (params.division) qs.set("division", params.division);
+  if (params.department) qs.set("department", params.department);
+  return request(`/api/roster?${qs.toString()}`);
+}

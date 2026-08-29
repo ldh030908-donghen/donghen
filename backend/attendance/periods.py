@@ -17,7 +17,13 @@ PERIOD_COL = {
 
 
 def add_period_columns(df: pd.DataFrame, date_col: str = C.COL_DATE) -> pd.DataFrame:
-    """period_week / period_month / period_quarter / period_half / period_year 컬럼을 추가."""
+    """period_week / period_month / period_quarter / period_half / period_year 컬럼을 추가.
+
+    날짜 파싱 + isocalendar()가 대용량 df에서는 꽤 걸리는 연산이라, 이미 컬럼이 붙어있으면
+    (db.load_all_records()가 로드 시점에 한 번 붙여둔 경우 등) 그대로 재사용하고 다시 계산하지 않는다.
+    """
+    if all(col in df.columns for col in PERIOD_COL.values()):
+        return df
     d = df.copy()
     dt = pd.to_datetime(d[date_col], format="%Y%m%d")
     iso = dt.dt.isocalendar()

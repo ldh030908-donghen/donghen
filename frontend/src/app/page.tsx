@@ -8,7 +8,7 @@ import { fetchOverview, type Overview } from "@/lib/api";
 
 export default function Home() {
   const [overview, setOverview] = useState<Overview | null>(null);
-  const [tab, setTab] = useState<Tab>("anomalies");
+  const [tab, setTab] = useState<Tab>("home");
   const [showUpload, setShowUpload] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [navPinned, setNavPinned] = useState(false);
@@ -50,6 +50,7 @@ export default function Home() {
                 overview={overview}
                 onDataChanged={reload}
                 tab={tab}
+                onSelectTab={setTab}
                 showUpload={showUpload}
                 onShowUploadChange={setShowUpload}
                 onOpenNav={() => setNavOpen(true)}

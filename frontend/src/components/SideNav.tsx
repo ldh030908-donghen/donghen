@@ -63,7 +63,7 @@ const SETTINGS_ICON = (
 );
 
 const MENU_ITEMS: MenuItem[] = [
-  { tab: "anomalies", label: "대시보드 홈", icon: HOME_ICON },
+  { tab: "home", label: "전체 현황", icon: HOME_ICON },
   { tab: "anomalies", label: "근태 특이건 조회", icon: ANOMALY_ICON },
   { tab: "hours", label: "근무시간 현황 조회", icon: CLOCK_ICON },
   { tab: "candidates", label: "확인대상", icon: CHECK_ICON },
@@ -159,7 +159,6 @@ export default function SideNav({
 
         <nav className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
           {MENU_ITEMS.map((item, i) => {
-            // "대시보드 홈"은 별도 화면이 없어 근태 특이건 조회(기본 화면)의 별칭으로 동작한다 — 둘 다 tab이 anomalies일 때 함께 활성 표시된다.
             const active = tab === item.tab;
             return (
               <button

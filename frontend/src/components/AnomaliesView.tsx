@@ -32,7 +32,7 @@ const WARNING_ICON = (
   </svg>
 );
 
-function StatTile({
+export function StatTile({
   label,
   value,
   icon,
@@ -90,7 +90,7 @@ function StatTile({
   );
 }
 
-const ICONS = {
+export const ICONS = {
   total: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14.18A2 2 0 0 0 3.82 21h16.36a2 2 0 0 0 1.71-3l-8.18-14.14a2 2 0 0 0-3.42 0z" strokeLinecap="round" strokeLinejoin="round" />
@@ -116,7 +116,7 @@ const ICONS = {
 const PAGE_SIZE = 10;
 const EXPANDED_PAGE_SIZE = 25;
 
-export default function AnomaliesView() {
+export default function AnomaliesView({ initialRuleFilter = null }: { initialRuleFilter?: string | null } = {}) {
   const [division, setDivision] = useState<string | null>(null);
   const [department, setDepartment] = useState<string | null>(null);
   const [employee, setEmployee] = useState<EmployeeMatch | null>(null);
@@ -126,7 +126,7 @@ export default function AnomaliesView() {
   const [year, setYear] = useState<string | null>(null);
   const [data, setData] = useState<AnomaliesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeRule, setActiveRule] = useState<string | null>(null);
+  const [activeRule, setActiveRule] = useState<string | null>(initialRuleFilter);
   const [search, setSearch] = useState("");
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [showAll, setShowAll] = useState(false);
