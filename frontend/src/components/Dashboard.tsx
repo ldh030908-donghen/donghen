@@ -134,7 +134,7 @@ export default function Dashboard({
 const TAB_META: Record<Tab, { label: string; description: string; icon: React.ReactNode }> = {
   home: {
     label: "전체 현황",
-    description: "전사 KPI, 시각화, 전체 인원 명단을 한 화면에서 확인합니다.",
+    description: "전사 KPI와 핵심 시각화를 한눈에 확인합니다. 인원별 세부 내역은 근태 특이건 조회·근무시간 현황 조회 탭에서 확인하세요.",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M3 11.5 12 4l9 7.5M5 10v10h5v-6h4v6h5V10" strokeLinecap="round" strokeLinejoin="round" />

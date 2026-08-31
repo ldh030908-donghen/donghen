@@ -6,26 +6,17 @@ import {
   fetchAnomaliesTopPeople,
   fetchAnomaliesTrend,
   fetchCandidates,
-  fetchEmployeeTimeline,
   fetchHoursTopPeople,
   fetchMonths,
   type AnomaliesResponse,
   type AnomalyTopPerson,
   type AnomalyTrendItem,
-  type CaseStatus,
-  type EmployeeTimeline,
   type HoursTopPerson,
-  type RosterItem,
 } from "@/lib/api";
 import { formatHoursMinutes } from "@/lib/hours";
 import { ICONS, StatTile } from "./AnomaliesView";
-import AnomalyDetailCell from "./AnomalyDetailCell";
-import CaseStatusToggle from "./CaseStatusToggle";
 import DivisionBarChart, { type BarSlice } from "./DivisionBarChart";
 import DonutChart from "./DonutChart";
-import EmployeeRosterTable from "./EmployeeRosterTable";
-import HeatmapChart, { type HeatmapCell } from "./HeatmapChart";
-import Modal from "./Modal";
 import MonthlyTrendChart from "./MonthlyTrendChart";
 import { ruleColor, ruleLabel } from "./RuleCountChart";
 import RuleSummaryGrid from "./RuleSummaryGrid";
@@ -48,6 +39,8 @@ const WARNING_ICON = (
   </svg>
 );
 
+/** 전체 현황 홈 화면 — 경영진이 한눈에 훑어볼 수 있는 요약만 담는다. 인원 명단처럼 세부 내역이
+ * 필요하면 "근태 특이건 조회"/"근무시간 현황 조회" 탭에서 조회하게 한다(그 탭들이 이미 그 역할을 함). */
 export default function OverviewView({
   totalEmployeeCount,
   onNavigateToRule,
@@ -62,7 +55,6 @@ export default function OverviewView({
   const [candidateTotal, setCandidateTotal] = useState<number | null>(null);
   const [topAnomalyPeople, setTopAnomalyPeople] = useState<AnomalyTopPerson[] | null>(null);
   const [topHoursPeople, setTopHoursPeople] = useState<HoursTopPerson[] | null>(null);
-  const [personModal, setPersonModal] = useState<{ item: RosterItem; timeline: EmployeeTimeline | null; error?: string } | null>(null);
 
   useEffect(() => {
     fetchMonths().then((ms) => {
@@ -86,55 +78,6 @@ export default function OverviewView({
     for (const item of data.items) counts.set(item.사업부, (counts.get(item.사업부) ?? 0) + 1);
     return Array.from(counts.entries()).map(([key, value]) => ({ key, label: key, value }));
   }, [data]);
-
-  const heatmap = useMemo(() => {
-    if (!data) return { rowKeys: [] as string[], colKeys: [] as string[], cells: [] as HeatmapCell[] };
-    const deptTotals = new Map<string, number>();
-    const cellCounts = new Map<string, number>();
-    const rules = new Set<string>();
-    for (const item of data.items) {
-      deptTotals.set(item.부서명, (deptTotals.get(item.부서명) ?? 0) + 1);
-      const key = `${item.부서명}::${item.rule_code}`;
-      cellCounts.set(key, (cellCounts.get(key) ?? 0) + 1);
-      rules.add(item.rule_code);
-    }
-    const rowKeys = Array.from(deptTotals.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([k]) => k);
-    const colKeys = Array.from(rules).sort();
-    const cells: HeatmapCell[] = [];
-    for (const row of rowKeys) {
-      for (const col of colKeys) {
-        const v = cellCounts.get(`${row}::${col}`) ?? 0;
-        if (v > 0) cells.push({ rowKey: row, colKey: col, value: v });
-      }
-    }
-    return { rowKeys, colKeys, cells };
-  }, [data]);
-
-  function openPersonModal(item: RosterItem) {
-    setPersonModal({ item, timeline: null });
-    fetchEmployeeTimeline(item.사번)
-      .then((res) => setPersonModal({ item, timeline: res }))
-      .catch((e) => setPersonModal({ item, timeline: null, error: e instanceof Error ? e.message : "조회 실패" }));
-  }
-
-  function handleStatusChange(empId: string, ruleCode: string, itemMonth: string, next: CaseStatus | null) {
-    setPersonModal((prev) =>
-      prev && prev.timeline
-        ? {
-            ...prev,
-            timeline: {
-              ...prev.timeline,
-              items: prev.timeline.items.map((it) =>
-                it.사번 === empId && it.rule_code === ruleCode && it.month === itemMonth ? { ...it, status: next ?? "" } : it
-              ),
-            },
-          }
-        : prev
-    );
-  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -202,10 +145,7 @@ export default function OverviewView({
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <DivisionBarChart title={`사업부별 특이건 수 (${data?.month ?? "-"})`} slices={divisionSlices} />
-        <HeatmapChart title={`부서 x 규칙 히트맵 · 상위 8개 부서 (${data?.month ?? "-"})`} {...heatmap} />
-      </div>
+      <DivisionBarChart title={`사업부별 특이건 수 (${data?.month ?? "-"})`} slices={divisionSlices} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <TopPeopleBanner
@@ -247,96 +187,6 @@ export default function OverviewView({
       </div>
 
       <RuleSummaryGrid byRule={data?.by_rule ?? {}} onSelectRule={onNavigateToRule} />
-
-      <EmployeeRosterTable month={month} onSelectEmployee={openPersonModal} />
-
-      {personModal && (
-        <Modal onClose={() => setPersonModal(null)} maxWidth={720}>
-          <div className="p-6 flex flex-col gap-4" style={{ maxHeight: "80vh" }}>
-            <div className="flex items-start justify-between gap-3 shrink-0">
-              <div>
-                <h3 className="text-base font-semibold">
-                  {personModal.item.성명}
-                  <span className="ml-1.5 text-xs font-normal" style={{ color: "var(--text-faint)" }}>
-                    {personModal.item.직급} · {personModal.item.사업부} · {personModal.item.부서명}
-                  </span>
-                </h3>
-                <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>
-                  사번 {personModal.item.사번} · {month} 평균근로시간 {formatHoursMinutes(personModal.item.avg_hours)}
-                </p>
-              </div>
-            </div>
-
-            {personModal.error && (
-              <div className="text-sm p-4 rounded-xl" style={{ color: "var(--danger)", background: "#dc262612" }}>
-                {personModal.error}
-              </div>
-            )}
-
-            {!personModal.error && !personModal.timeline && (
-              <div className="flex items-center justify-center py-10">
-                <span
-                  className="w-5 h-5 rounded-full block"
-                  style={{ border: "2px solid var(--accent)", borderTopColor: "transparent", animation: "spin 0.8s linear infinite" }}
-                />
-              </div>
-            )}
-
-            {personModal.timeline && (
-              <div className="overflow-y-auto flex flex-col gap-4">
-                {personModal.timeline.hours_trend.length > 0 && (
-                  <MonthlyTrendChart
-                    title="월별 실근로시간 추이"
-                    points={personModal.timeline.hours_trend.map((t) => ({ label: `${Number(t.month.slice(5, 7))}월`, value: t.hours }))}
-                    valueFormatter={formatHoursMinutes}
-                    emptyHint="근무시간 데이터가 없습니다."
-                  />
-                )}
-                {personModal.timeline.items.length === 0 ? (
-                  <div className="text-sm py-6 text-center" style={{ color: "var(--text-faint)" }}>
-                    이 인원의 특이건·확인대상 이력이 없습니다.
-                  </div>
-                ) : (
-                  <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-                    {personModal.timeline.items.map((item, i) => (
-                      <div
-                        key={`${item.month}-${item.rule_code}-${i}`}
-                        className="flex items-start gap-3 px-4 py-3"
-                        style={{ borderTop: i === 0 ? "none" : "1px solid var(--border)" }}
-                      >
-                        <div className="w-14 shrink-0 text-xs font-medium pt-1" style={{ color: "var(--text-faint)" }}>
-                          {item.month}
-                        </div>
-                        <div className="flex-1 min-w-0 flex flex-col gap-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-medium">{item.source === "rule" ? ruleLabel(item.rule_code) : item.case_name}</span>
-                            <span
-                              className="text-xs px-1.5 py-0.5 rounded-md font-bold tabular-nums"
-                              style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}
-                            >
-                              {item.occurrence_count.toLocaleString()}회
-                            </span>
-                          </div>
-                          <AnomalyDetailCell detail={item.detail} />
-                        </div>
-                        <div className="shrink-0 pt-1">
-                          <CaseStatusToggle
-                            empId={item.사번}
-                            ruleCode={item.rule_code}
-                            month={item.month}
-                            status={item.status}
-                            onChange={(next) => handleStatusChange(item.사번, item.rule_code, item.month, next)}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }

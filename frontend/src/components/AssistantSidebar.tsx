@@ -12,9 +12,9 @@ export default function AssistantSidebar() {
   const [status, setStatus] = useState<ChatStatus>(INITIAL_STATUS);
 
   return (
-    <aside className="w-full lg:w-[296px] shrink-0 flex flex-col gap-4 h-[calc(100vh-8rem)] lg:sticky lg:top-8">
+    <aside className="w-full lg:w-[420px] shrink-0 flex flex-col gap-4 h-[calc(100vh-4rem)] lg:sticky lg:top-8">
       <div
-        className="flex-[5] min-h-0 rounded-2xl overflow-hidden"
+        className="flex-[7] min-h-0 rounded-2xl overflow-hidden"
         style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}
       >
         <ChatPanel onStatusChange={setStatus} />
