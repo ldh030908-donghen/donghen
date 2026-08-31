@@ -16,6 +16,9 @@ import pandas as pd
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "attendance.db")
 
 # 저장할 파생 컬럼 (load_raw + org.attach_division 결과에서 추출)
+# 근무스케쥴타입/근무시작/근무종료/당시부서는 애초에 규칙 계산에는 안 쓰여서 처음엔 저장 안 했는데,
+# "추출양식.xlsx" 표준 엑셀 추출(export_template.py)에 그대로 필요해서 나중에 추가됨 — 이 4개는
+# 이 컬럼이 추가되기 전에 업로드된 기존 행에는 비어있고, 재업로드해야 채워진다.
 STORED_COLUMNS = [
     "사번", "부서명", "성명", "직급", "일자", "요일", "근무조", "근무형태",
     "입문", "출문", "변경후시작", "변경후종료", "근태",
@@ -24,6 +27,7 @@ STORED_COLUMNS = [
     "worktime_minutes", "exclude_minutes", "overtime_minutes",
     "night_minutes", "holiday_work_minutes",
     "is_hq_flex", "is_field_flex", "사업부",
+    "근무스케쥴타입", "근무시작", "근무종료", "당시부서",
 ]
 
 _SCHEMA = f"""
@@ -54,6 +58,10 @@ CREATE TABLE IF NOT EXISTS daily_records (
     is_hq_flex INTEGER,
     is_field_flex INTEGER,
     사업부 TEXT,
+    근무스케쥴타입 TEXT,
+    근무시작 TEXT,
+    근무종료 TEXT,
+    당시부서 TEXT,
     uploaded_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (사번, 일자)
 );
@@ -88,12 +96,26 @@ CREATE TABLE IF NOT EXISTS case_status (
 """
 
 
+# daily_records에 나중에 추가된 컬럼들. CREATE TABLE IF NOT EXISTS는 테이블이 이미 있으면
+# 아무것도 안 하므로, 기존 DB(이미 daily_records가 있는 배포본/로컬 DB)에는 ALTER TABLE로
+# 직접 추가해줘야 한다. 이미 컬럼이 있으면 조용히 건너뛴다(재실행 안전).
+_MIGRATION_COLUMNS = ["근무스케쥴타입", "근무시작", "근무종료", "당시부서"]
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(daily_records)")}
+    for col in _MIGRATION_COLUMNS:
+        if col not in existing:
+            conn.execute(f"ALTER TABLE daily_records ADD COLUMN {col} TEXT")
+
+
 @contextmanager
 def get_conn():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     try:
         conn.executescript(_SCHEMA)
+        _migrate(conn)
         yield conn
         conn.commit()
     finally:

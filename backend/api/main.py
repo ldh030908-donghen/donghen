@@ -33,6 +33,7 @@ from attendance import candidates
 from attendance import chat
 from attendance import columns as C
 from attendance import db
+from attendance import export_template
 from attendance import news
 from attendance import rules
 from attendance.hours_summary import query_avg_hours, summarize_worktime
@@ -220,6 +221,48 @@ def _available_months(df: "pd.DataFrame | None" = None) -> list[str]:
     return months
 
 
+def _worktime_detail_scope(
+    division: Optional[str] = None,
+    department: Optional[str] = None,
+    top_n: Optional[int] = None,
+    metric: str = "worktime",
+    period_value: Optional[str] = None,
+) -> "tuple[pd.DataFrame, list[str]]":
+    """"일별/월별 근무시간" 엑셀 추출 대상 인원의 전체 기간 raw 레코드를 고른다.
+
+    top_n이 있으면 그 시점(period_value, 생략 시 최신월) 기준 근무시간 상위 N개 부서를 먼저
+    찾고 그 소속 인원 '전체 기간' 기록을 포함한다(랭킹은 한 시점 기준이지만, 추출은 그 부서
+    소속 인원의 일별/월별 데이터 전체를 준다 — 히스토리 비교가 목적이라 기간을 좁히지 않음).
+    반환: (scoped df, 선택된 부서명 목록)
+    """
+    df = db.load_all_records()
+    if df.empty:
+        return df, []
+
+    if top_n:
+        months = _available_months(df)
+        target_period = period_value or (months[-1] if months else None)
+        summary = summarize_worktime(df, group_level="department", period_kind="month", metric=metric)
+        if division:
+            dept_scope = df[df[DIVISION_COL] == division][C.COL_DEPT].unique()
+            summary = summary[summary[C.COL_DEPT].isin(dept_scope)]
+        if target_period:
+            summary = summary[summary["period"] == target_period]
+        summary = summary.sort_values("avg_hours_per_employee_per_month", ascending=False).head(int(top_n))
+        departments = summary[C.COL_DEPT].tolist()
+        scoped = df[df[C.COL_DEPT].isin(departments)]
+    elif department:
+        departments = [department]
+        scoped = df[df[C.COL_DEPT] == department]
+    elif division:
+        scoped = df[df[DIVISION_COL] == division]
+        departments = sorted(scoped[C.COL_DEPT].dropna().unique().tolist())
+    else:
+        scoped = df
+        departments = sorted(df[C.COL_DEPT].dropna().unique().tolist())
+    return scoped, departments
+
+
 # --- 챗봇(/api/chat)이 호출하는 조회 함수. HTTP를 거치지 않고 내부 로직을 직접 재사용한다. ---
 
 
@@ -293,6 +336,27 @@ def _chat_get_anomalies(
         "affected_employees": affected,
         "by_rule": by_rule,
         "items": items[:200],
+    }
+
+
+def _chat_export_worktime_detail(
+    division: Optional[str] = None,
+    department: Optional[str] = None,
+    top_n: Optional[int] = None,
+    metric: str = "worktime",
+    period_value: Optional[str] = None,
+) -> dict:
+    """실제 파일은 /api/export?kind=worktime_detail 다운로드 링크로 내려가고, 이 함수는 챗봇
+    답변에 쓸 요약(선택된 부서/인원수)만 돌려준다."""
+    scoped, departments = _worktime_detail_scope(
+        division=division, department=department, top_n=top_n, metric=metric, period_value=period_value
+    )
+    if scoped.empty:
+        return {"departments": [], "employee_count": 0, "row_count": 0}
+    return {
+        "departments": departments,
+        "employee_count": int(scoped[C.COL_EMP_ID].nunique()),
+        "row_count": int(len(scoped)),
     }
 
 
@@ -1047,6 +1111,7 @@ def post_chat(req: ChatRequest):
         context=context,
         get_hours_summary_fn=_chat_get_hours_summary,
         get_anomalies_fn=_chat_get_anomalies,
+        export_worktime_detail_fn=_chat_export_worktime_detail,
     )
     return result
 
@@ -1062,11 +1127,34 @@ def export_data(
     group_level: str = "division",
     period_kind: str = "month",
     metric: str = "worktime",
+    top_n: Optional[int] = None,
 ):
     """챗봇 응답 또는 조회 화면에 나온 목록을 xlsx로 내려받는다."""
     df = db.load_all_records()
     if df.empty:
         raise HTTPException(status_code=404, detail="업로드된 데이터가 없습니다.")
+
+    if kind == "worktime_detail":
+        scoped, departments = _worktime_detail_scope(
+            division=division, department=department, top_n=top_n, metric=metric, period_value=month
+        )
+        if scoped.empty:
+            raise HTTPException(status_code=404, detail="조건에 맞는 근무시간 데이터가 없습니다.")
+        buf, daily_rows, monthly_rows = export_template.build_worktime_workbook(scoped)
+        logger.info("근무시간 상세 추출: 부서 %s / 일별 %d행 / 월별 %d행", departments, daily_rows, monthly_rows)
+        dept_label = departments[0] if len(departments) == 1 else f"{len(departments)}개부서"
+        ascii_fallback = "worktime_detail.xlsx"
+        filename = f"근무시간상세_{dept_label}.xlsx"
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_fallback}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
+        )
 
     if kind == "anomalies":
         months = _available_months(df)

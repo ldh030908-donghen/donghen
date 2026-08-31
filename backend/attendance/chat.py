@@ -1,12 +1,14 @@
-"""사내 GPT 게이트웨이(mlapi.run) 기반 챗봇: 자연어 질의를 근무시간/특이건 조회 도구 호출로 변환한다.
+"""OpenAI 기반 챗봇: 자연어 질의를 근무시간/특이건 조회·엑셀 추출 도구 호출로 변환한다.
 
-OpenAI 호환 Chat Completions API(함수 호출)를 사용한다. Anthropic이 아니라 사내 게이트웨이를
-쓰기로 한 결정에 따라 openai SDK로 구현했다 (.env의 ML_API_KEY / GPT5_ENDPOINT / GPT5_MODEL_NAME).
+OpenAI 호환 Chat Completions API(함수 호출)를 사용한다. Anthropic이 아니라 OpenAI 계열을
+쓰기로 한 결정에 따라 openai SDK로 구현했다. .env의 OPENAI_API_KEY(개인/회사 결제 키로 OpenAI에
+직결)가 있으면 그걸 우선 쓰고, 없으면 사내 GPT 게이트웨이(mlapi.run, ML_API_KEY + GPT5_ENDPOINT)로
+폴백한다 — 자세한 우선순위는 _client() 참고. 모델명은 GPT5_MODEL_NAME으로 override 가능.
 노동법 질의에는 Tavily 웹검색(.env의 TAVILY_API_KEY)을 근거 자료로 사용한다.
 
-호출부(api/main.py)가 실제 조회 로직(get_hours_summary_fn / get_anomalies_fn)과
-현재 데이터 컨텍스트(context)를 주입해준다. 이 모듈은 게이트웨이와의 tool-call 왕복만
-담당하고, DB나 규칙 계산에는 직접 접근하지 않는다.
+호출부(api/main.py)가 실제 조회 로직(get_hours_summary_fn / get_anomalies_fn /
+export_worktime_detail_fn)과 현재 데이터 컨텍스트(context)를 주입해준다. 이 모듈은 모델과의
+tool-call 왕복만 담당하고, DB나 규칙 계산에는 직접 접근하지 않는다.
 """
 
 from __future__ import annotations
@@ -104,6 +106,40 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "export_worktime_detail",
+            "description": (
+                "지정한 조건에 해당하는 인원 전체의 일별/월별 근무시간을 사내 표준 엑셀 양식(일별 근무시간 시트 + "
+                "월별 근무시간 시트, 근무시간류는 [h]:mm:ss로 표시)으로 추출할 파일을 준비한다. "
+                "'근로시간 상위 N개 부서 뽑아줘', 'OO부서 일별/월별 근무시간 추출해줘/뽑아줘' 처럼 요약이 아니라 "
+                "원본 형태의 엑셀 파일 자체가 필요할 때 이 도구를 쓴다 "
+                "(get_hours_summary는 집계 수치만 보여줄 때, 이 도구는 표준 양식 엑셀 추출용 — 서로 다르다). "
+                "top_n을 주면 그 시점 기준 근무시간 상위 N개 부서를 자동으로 찾아 그 소속 인원 전체를 포함한다."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "division": {"type": "string", "description": "특정 사업부로 좁힐 때"},
+                    "department": {"type": "string", "description": "특정 부서 하나를 직접 지정할 때"},
+                    "top_n": {
+                        "type": "integer",
+                        "description": "근무시간 상위 N개 부서를 자동으로 골라 그 소속 인원 전체를 포함할 때 (예: '상위 5개 부서' -> 5)",
+                    },
+                    "metric": {
+                        "type": "string",
+                        "enum": ["worktime", "stay"],
+                        "description": "top_n 랭킹에 쓸 지표. 기본 worktime(실근로시간)",
+                    },
+                    "period_value": {
+                        "type": "string",
+                        "description": "top_n 랭킹 기준 시점(YYYY-MM). 생략하면 최신월 기준",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_labor_law",
             "description": (
                 "대한민국 노동법(근로기준법 등) 관련 질문에 답하기 위해 최신 법령/판례/실무 자료를 웹에서 검색한다. "
@@ -136,6 +172,10 @@ def _build_system_prompt(context: dict) -> str:
         "나눠서 호출해도 된다. 한 번에 하나만 묻지 말고 필요한 호출을 다 끝낸 뒤 마지막에 종합해서 답하라.",
         "- 노동법/법적 근거를 묻는 질문에는 search_labor_law로 찾은 내용을 근거로 답하되, 이는 참고 정보이며 "
         "정식 법률 자문이 아니라는 점을 답변에 짧게 밝혀라.",
+        "- '일별/월별 근무시간을 뽑아줘/추출해줘' 처럼 요약 수치가 아니라 원본 형태의 엑셀 파일 자체를 원하는 "
+        "요청에는 get_hours_summary가 아니라 export_worktime_detail을 써라. '근로시간 상위 N개 부서 뽑아줘' 같은 "
+        "요청도 순위를 조회한 뒤 그 결과를 나열하는 게 아니라 export_worktime_detail(top_n=N)을 바로 호출해서 "
+        "그 부서들 소속 인원 전체의 일별/월별 근무시간 엑셀을 준비해라.",
         "- 답변은 2~5문장으로 간결하게 작성한다. 상세 목록은 화면에 표로 별도 표시되니 나열하지 않는다.",
         "",
         f"오늘 날짜: {context['today']}",
@@ -155,6 +195,11 @@ def _build_system_prompt(context: dict) -> str:
 
 
 def _client() -> "OpenAI | None":
+    # 개인 결제한 실제 OpenAI 키(OPENAI_API_KEY)가 있으면 그걸 우선 쓴다(base_url 없이 OpenAI
+    # 정식 엔드포인트로 직결). 없으면 기존 사내 GPT 게이트웨이(ML_API_KEY + GPT5_ENDPOINT)로 폴백.
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    if openai_key:
+        return OpenAI(api_key=openai_key)
     api_key = os.environ.get("ML_API_KEY")
     base_url = os.environ.get("GPT5_ENDPOINT")
     if not api_key or not base_url:
@@ -216,6 +261,9 @@ def _step_label(name: str, args: dict) -> str:
         month = args.get("month") or "최신월"
         rank = f" · 상위 {args['top_n']}명" if args.get("top_n") else ""
         return f"특이건 조회 — {scope} · {month}{rank}"
+    if name == "export_worktime_detail":
+        scope = args.get("division") or args.get("department") or (f"상위 {args['top_n']}개 부서" if args.get("top_n") else "전사")
+        return f"근무시간 상세 엑셀 추출 준비 — {scope}"
     if name == "search_labor_law":
         return f"노동법 자료 검색 — \"{args.get('query', '')}\""
     return f"{name} 호출"
@@ -227,6 +275,7 @@ def run_chat(
     context: dict,
     get_hours_summary_fn: "Callable[..., dict]",
     get_anomalies_fn: "Callable[..., dict]",
+    export_worktime_detail_fn: "Callable[..., dict] | None" = None,
 ) -> dict:
     """대화 한 턴을 처리한다.
 
@@ -236,14 +285,17 @@ def run_chat(
     client = _client()
     if client is None:
         return {
-            "reply": "챗봇을 사용하려면 서버에 ML_API_KEY / GPT5_ENDPOINT 환경변수가 설정되어야 합니다.",
+            "reply": "챗봇을 사용하려면 서버에 OPENAI_API_KEY(개인 결제 키) 또는 ML_API_KEY/GPT5_ENDPOINT(사내 게이트웨이) 환경변수가 설정되어야 합니다.",
             "result": None,
             "export": None,
             "steps": [],
             "reference": None,
         }
 
-    model = os.environ.get("GPT5_MODEL_NAME", "openai/gpt-5-mini")
+    # 게이트웨이는 "openai/gpt-5-mini"처럼 provider 접두사가 붙은 모델 ID를 쓰지만, OpenAI 정식
+    # API에 직결할 땐 접두사 없는 실제 모델명이어야 한다.
+    default_model = "gpt-5-mini" if os.environ.get("OPENAI_API_KEY") else "openai/gpt-5-mini"
+    model = os.environ.get("GPT5_MODEL_NAME", default_model)
     system_prompt = _build_system_prompt(context)
 
     messages: list = [{"role": "system", "content": system_prompt}] + list(history) + [
@@ -308,6 +360,12 @@ def run_chat(
                 elif name == "get_anomalies":
                     output = get_anomalies_fn(**args)
                     last_export = {"kind": "anomalies", "params": args}
+                elif name == "export_worktime_detail":
+                    if export_worktime_detail_fn is None:
+                        output = {"error": "이 기능은 현재 서버에 연결되어 있지 않습니다."}
+                    else:
+                        output = export_worktime_detail_fn(**args)
+                        last_export = {"kind": "worktime_detail", "params": args}
                 elif name == "search_labor_law":
                     output = _search_labor_law(**args)
                 else:
