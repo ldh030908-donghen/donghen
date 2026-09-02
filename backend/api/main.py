@@ -1171,16 +1171,51 @@ def export_data(
         export_df = result.fillna("")
         filename = f"근태특이건_{target_month}.xlsx"
     elif kind == "hours_summary":
-        d = df
-        if division:
-            d = d[d[DIVISION_COL] == division]
-        if department:
-            d = d[d[C.COL_DEPT] == department]
-        try:
-            export_df = summarize_worktime(d, group_level=group_level, period_kind=period_kind, metric=metric)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        filename = f"근무시간현황_{group_level}_{period_kind}.xlsx"
+        # get_hours_summary 챗봇 답변에 딸려오는 다운로드도 worktime_detail과 동일하게
+        # 사용자 표준 양식(일별/월별 근무시간)으로 내려준다 — 예전엔 summarize_worktime 결과를
+        # 그대로 시트 하나에 dump해서 양식도 다르고 top_n/month 필터도 씹혔던 버그가 있었다.
+        if group_level == "employee":
+            d = df
+            if division:
+                d = d[d[DIVISION_COL] == division]
+            if department:
+                d = d[d[C.COL_DEPT] == department]
+            try:
+                ranked = summarize_worktime(d, group_level="employee", period_kind=period_kind, metric=metric)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if month:
+                ranked = ranked[ranked["period"] == month]
+            ranked = ranked.sort_values("avg_hours_per_employee_per_month", ascending=False)
+            if top_n:
+                ranked = ranked.head(int(top_n))
+            emp_ids = ranked[C.COL_EMP_ID].unique().tolist()
+            scoped = df[df[C.COL_EMP_ID].isin(emp_ids)]
+            departments = sorted(scoped[C.COL_DEPT].dropna().unique().tolist())
+        else:
+            scoped, departments = _worktime_detail_scope(
+                division=division, department=department, top_n=top_n, metric=metric, period_value=month
+            )
+        if scoped.empty:
+            raise HTTPException(status_code=404, detail="조건에 맞는 근무시간 데이터가 없습니다.")
+        buf, daily_rows, monthly_rows = export_template.build_worktime_workbook(scoped)
+        logger.info(
+            "근무시간현황(표준양식) 추출: group_level=%s / 부서 %s / 일별 %d행 / 월별 %d행",
+            group_level, departments, daily_rows, monthly_rows,
+        )
+        dept_label = departments[0] if len(departments) == 1 else f"{len(departments)}개부서"
+        ascii_fallback = "worktime_detail.xlsx"
+        filename = f"근무시간상세_{dept_label}.xlsx"
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_fallback}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
+        )
     else:
         raise HTTPException(status_code=400, detail=f"알 수 없는 export kind: {kind}")
 

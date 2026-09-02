@@ -317,7 +317,11 @@ export async function sendChatMessage(
 export function buildExportUrl(exp: { kind: string; params: Record<string, unknown> }): string {
   const qs = new URLSearchParams({ kind: exp.kind });
   for (const [k, v] of Object.entries(exp.params)) {
-    if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    if (v === undefined || v === null || v === "") continue;
+    // 챗봇 도구 인자는 period_value라는 이름을 쓰지만 /api/export는 month 파라미터를 받는다 —
+    // 이름이 안 맞아서 특정 월을 지정해도 조용히 무시되던 버그였다.
+    const key = k === "period_value" ? "month" : k;
+    qs.set(key, String(v));
   }
   return `${API_BASE}/api/export?${qs.toString()}`;
 }
