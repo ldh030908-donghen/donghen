@@ -14,18 +14,18 @@ export default function AssistantSidebar() {
   return (
     <aside className="w-full lg:w-[420px] shrink-0 flex flex-col gap-4 h-[calc(100vh-4rem)] lg:sticky lg:top-8">
       <div
-        className="flex-[7] min-h-0 rounded-2xl overflow-hidden"
+        className="flex-1 min-h-0 rounded-2xl overflow-hidden"
         style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}
       >
         <ChatPanel onStatusChange={setStatus} />
       </div>
-      <div className="flex-[2] min-h-0">
+      <div className="h-24 shrink-0">
         <HighlightsBanner />
       </div>
-      <div className="flex-[2] min-h-0">
+      <div className="h-24 shrink-0">
         <NewsBanner />
       </div>
-      <div className="flex-[2] min-h-0">
+      <div className="h-24 shrink-0">
         <ProcessStatusPanel
           loading={status.loading}
           steps={status.steps}
